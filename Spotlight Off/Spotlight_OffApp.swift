@@ -3,7 +3,7 @@ import AppKit
 import UserNotifications
 
 @main
-struct SpotlightShieldApp: App {
+struct SpotlightOffApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     
     var body: some Scene {
@@ -51,7 +51,7 @@ class MenuBarManager: NSObject, ObservableObject {
 
     func setupMenu() {
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "Spotlight Shield Active", action: nil, keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Spotlight Off Active", action: nil, keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
         
         // Settings/History Window
