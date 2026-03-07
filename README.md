@@ -33,7 +33,8 @@ Every time you plug in an external drive, macOS quietly starts building a Spotli
 
 ## Installation
 
-1. Download the latest release from the [Releases](../../releases) page
+1. Download the latest release from the [Releases](../../releases) page.
+⚠️ This app is not notarized. On first launch, right-click the app and choose Open, then click Open in the dialog. You only need to do this once.
 2. Move **Spotlight Off.app** to your `/Applications` folder
 3. Launch it — the icon will appear in your menu bar
 4. On first use, macOS will ask for administrator approval to run `mdutil`
