@@ -41,9 +41,9 @@ struct SpotlightOffApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
-        Settings {
-            SettingsView(monitor: appDelegate.driveMonitor)
-        }
+        // Empty Settings scene — window is managed manually in AppDelegate
+        // so it works reliably across all macOS versions including Tahoe
+        Settings { EmptyView() }
     }
 }
 
@@ -112,9 +112,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = menu
     }
 
+    private var settingsWindow: NSWindow?
+
     @objc func openSettings() {
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        if let window = settingsWindow, window.isVisible {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        // Build the window manually — immune to SwiftUI scene API changes
+        let view = NSHostingView(rootView: SettingsView(monitor: driveMonitor))
+        view.frame = NSRect(x: 0, y: 0, width: 440, height: 600)
+
+        let window = NSWindow(
+            contentRect: view.frame,
+            styleMask: [.titled, .closable, .miniaturizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "History & Settings — Spotlight Off"
+        window.contentView = view
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        settingsWindow = window
     }
 }
 
