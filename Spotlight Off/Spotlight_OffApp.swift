@@ -26,7 +26,7 @@ class LogStore: ObservableObject {
     func log(_ message: String) {
         let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         let line = "[\(timestamp)] \(message)"
-        print(line)  // still prints to Xcode console too
+        print(line)
         DispatchQueue.main.async {
             self.entries.append(line)
             if self.entries.count > 200 { self.entries.removeFirst() }
@@ -41,8 +41,8 @@ struct SpotlightOffApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
-        // Empty Settings scene — window is managed manually in AppDelegate
-        // so it works reliably across all macOS versions including Tahoe
+        // Window managed manually in AppDelegate for cross-version compatibility.
+        // The Settings scene is kept only to satisfy SwiftUI's requirements.
         Settings { EmptyView() }
     }
 }
@@ -52,6 +52,7 @@ struct SpotlightOffApp: App {
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem!
     let driveMonitor = DriveMonitor()
+    private var settingsWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -112,16 +113,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = menu
     }
 
-    private var settingsWindow: NSWindow?
-
     @objc func openSettings() {
         if let window = settingsWindow, window.isVisible {
             window.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            activateApp()
             return
         }
 
-        // Build the window manually — immune to SwiftUI scene API changes
         let view = NSHostingView(rootView: SettingsView(monitor: driveMonitor))
         view.frame = NSRect(x: 0, y: 0, width: 440, height: 600)
 
@@ -136,8 +134,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.center()
         window.isReleasedWhenClosed = false
         window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        activateApp()
         settingsWindow = window
+    }
+
+    /// Brings the app to front, compatible with macOS 13 and 14+.
+    private func activateApp() {
+        if #available(macOS 14.0, *) {
+            NSApp.activate()
+        } else {
+            NSApp.activate(ignoringOtherApps: true)
+        }
     }
 }
 
@@ -172,17 +179,14 @@ class DriveMonitor: ObservableObject {
             return
         }
 
-        // On macOS Big Sur+, /Volumes/X is a firmlink to /System/Volumes/Data/Volumes/X.
-        // These are NOT symlinks — realpath() and canonicalPath don't follow firmlinks.
-        // We construct the real path manually, which is always predictable.
+        // On macOS Big Sur+, /Volumes/X is a firmlink (not a symlink) pointing to
+        // /System/Volumes/Data/Volumes/X. realpath() cannot follow firmlinks,
+        // so we construct the real path manually for mdutil -s.
+        // However mdutil -i off requires the /Volumes/X form, so we keep both.
         let resolvedPath: String
         if path.hasPrefix("/Volumes/") {
             let candidate = "/System/Volumes/Data" + path
-            if FileManager.default.fileExists(atPath: candidate) {
-                resolvedPath = candidate
-            } else {
-                resolvedPath = path
-            }
+            resolvedPath = FileManager.default.fileExists(atPath: candidate) ? candidate : path
         } else {
             resolvedPath = path
         }
@@ -192,14 +196,11 @@ class DriveMonitor: ObservableObject {
         LogStore.shared.log("Accepted — scheduling disable for: \(name)")
 
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1.5) { [weak self] in
-            self?.handleVolume(path: resolvedPath, name: name)
+            self?.handleVolume(resolvedPath: resolvedPath, volumesPath: path, name: name)
         }
     }
 
     // MARK: Volume Filtering
-    // Accepts any local, non-internal, non-root volume.
-    // We intentionally do NOT require volumeIsRemovable because many
-    // bus-powered and SSD external drives don't set that flag.
 
     private func isExternalVolume(_ url: URL) -> Bool {
         guard let vals = try? url.resourceValues(forKeys: [
@@ -213,21 +214,23 @@ class DriveMonitor: ObservableObject {
         }
 
         let isRoot      = vals.volumeIsRootFileSystem ?? false
+        let isLocal     = vals.volumeIsLocal          ?? false
+        let isRemovable = vals.volumeIsRemovable      ?? false
         let isInternal  = vals.volumeIsInternal       ?? false
-        let isLocal     = vals.volumeIsLocal           ?? false
-        let isRemovable = vals.volumeIsRemovable       ?? false
 
         LogStore.shared.log("Flags — root:\(isRoot) internal:\(isInternal) local:\(isLocal) removable:\(isRemovable)")
 
         if isRoot   { return false }
-        if !isLocal { return false }   // skip network volumes
+        if !isLocal { return false }
         return true
     }
 
     // MARK: Spotlight Check & Disable
 
-    private func handleVolume(path: String, name: String) {
-        let enabled = isIndexingEnabled(path: path)
+    /// - Parameter resolvedPath: The /System/Volumes/Data/... path, used for mdutil -s
+    /// - Parameter volumesPath:  The /Volumes/... path, required by mdutil -i off
+    private func handleVolume(resolvedPath: String, volumesPath: String, name: String) {
+        let enabled = isIndexingEnabled(path: resolvedPath)
         LogStore.shared.log("Indexing enabled for '\(name)': \(enabled)")
 
         guard enabled else {
@@ -235,12 +238,12 @@ class DriveMonitor: ObservableObject {
             return
         }
 
-        let ok = disableIndexing(path: path)
+        let ok = runMdutilAsAdmin(path: volumesPath)
         LogStore.shared.log("Disable succeeded: \(ok)")
 
         if ok {
             DispatchQueue.main.async { [weak self] in
-                self?.addToHistory(name: name, path: path)
+                self?.addToHistory(name: name, path: volumesPath)
             }
         }
     }
@@ -256,72 +259,42 @@ class DriveMonitor: ObservableObject {
             try p.run()
             p.waitUntilExit()
             let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            LogStore.shared.log("mdutil -s: \(out.trimmingCharacters(in: .whitespacesAndNewlines))")
-            return !out.lowercased().contains("disabled")
+            let trimmed = out.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            LogStore.shared.log("mdutil -s: \(trimmed)")
+            return !trimmed.contains("disabled")
         } catch {
             LogStore.shared.log("mdutil -s error: \(error)")
             return true
         }
     }
 
-    private func disableIndexing(path: String) -> Bool {
-        // mdutil -i off only accepts the /Volumes/X form, not the firmlink target.
-        // Convert back from /System/Volumes/Data/Volumes/X if needed.
-        let volumesPath: String
-        if path.hasPrefix("/System/Volumes/Data/Volumes/") {
-            volumesPath = String(path.dropFirst("/System/Volumes/Data".count))
-        } else {
-            volumesPath = path
-        }
-        LogStore.shared.log("Using path for mdutil: \(volumesPath)")
-
-        // First try running mdutil directly without admin — works if app has disk access
-        if runMdutil(path: volumesPath) { return true }
-
-        // Fall back to osascript with administrator privileges
-        return runMdutilAsAdmin(path: volumesPath)
-    }
-
-    private func runMdutil(path: String) -> Bool {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/mdutil")
-        p.arguments = ["-i", "off", path]
-        let outPipe = Pipe(); let errPipe = Pipe()
-        p.standardOutput = outPipe; p.standardError = errPipe
-        do {
-            try p.run(); p.waitUntilExit()
-            let out = String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            LogStore.shared.log("mdutil direct out: \(out.trimmingCharacters(in: .whitespacesAndNewlines))")
-            LogStore.shared.log("mdutil direct err: \(err.trimmingCharacters(in: .whitespacesAndNewlines))")
-            LogStore.shared.log("mdutil direct exit: \(p.terminationStatus)")
-            let combined = (out + err).lowercased()
-            return p.terminationStatus == 0 && !combined.contains("error") && !combined.contains("could not")
-        } catch {
-            LogStore.shared.log("mdutil direct threw: \(error)")
-            return false
-        }
-    }
+    // Removed runMdutil (non-admin) — mdutil -i off always requires root,
+    // so the direct attempt always failed and just wasted time.
 
     private func runMdutilAsAdmin(path: String) -> Bool {
         let escaped = path.replacingOccurrences(of: "\"", with: "\\\"")
-        let script = "do shell script (\"/usr/bin/mdutil -i off \" & quoted form of \"\(escaped)\") with administrator privileges"
-        LogStore.shared.log("Trying osascript admin for: \(path)")
+        let script  = "do shell script (\"/usr/bin/mdutil -i off \" & quoted form of \"\(escaped)\") with administrator privileges"
+        LogStore.shared.log("Running osascript for: \(path)")
 
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         p.arguments = ["-e", script]
-        let outPipe = Pipe(); let errPipe = Pipe()
-        p.standardOutput = outPipe; p.standardError = errPipe
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        p.standardOutput = outPipe
+        p.standardError  = errPipe
         do {
-            try p.run(); p.waitUntilExit()
+            try p.run()
+            p.waitUntilExit()
             let out = String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
             let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
             LogStore.shared.log("osascript out: \(out.trimmingCharacters(in: .whitespacesAndNewlines))")
             LogStore.shared.log("osascript err: \(err.trimmingCharacters(in: .whitespacesAndNewlines))")
             LogStore.shared.log("osascript exit: \(p.terminationStatus)")
             let combined = (out + err).lowercased()
-            return p.terminationStatus == 0 && !combined.contains("error") && !combined.contains("could not")
+            return p.terminationStatus == 0
+                && !combined.contains("error")
+                && !combined.contains("could not")
         } catch {
             LogStore.shared.log("osascript threw: \(error)")
             return false
@@ -368,7 +341,11 @@ class DriveMonitor: ObservableObject {
 
 struct SettingsView: View {
     @ObservedObject var monitor: DriveMonitor
-    @State private var launchAtLogin: Bool = SMAppService.mainApp.status == .enabled
+
+    // Lazy init avoids a potential crash if SMAppService is unavailable
+    @State private var launchAtLogin: Bool = {
+        SMAppService.mainApp.status == .enabled
+    }()
 
     private let dateFormatter: DateFormatter = {
         let f = DateFormatter()
