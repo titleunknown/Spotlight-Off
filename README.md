@@ -22,6 +22,7 @@ Every time you plug in an external drive, macOS quietly starts building a Spotli
 - 🚫 **Disables** it instantly using `mdutil`, with a one-time admin prompt
 - 📋 **Logs** every action in a live activity log inside the app
 - 🚀 **Launches at login** so it's always running in the background
+- 👋 **First-launch setup guide** walks you through all required permissions
 
 ---
 
@@ -36,20 +37,36 @@ Every time you plug in an external drive, macOS quietly starts building a Spotli
 1. Download the latest release from the [Releases](https://github.com/titleunknown/Spotlight-Off/releases) page
 2. Move **Spotlight Off.app** to your `/Applications` folder
 3. Launch it — the icon will appear in your menu bar
-4. On first use, macOS will ask for administrator approval to run `mdutil`
+4. A **setup guide** will appear on first launch to walk you through the required permissions
 5. Optionally enable **Launch at Login** in the settings window
 
 ### ⚠️ Gatekeeper warning
 This app is not notarized (Apple Developer Program enrollment required for notarization). On first launch you will see a warning saying the app can't be verified. To open it:
 1. Right-click **Spotlight Off.app** and choose **Open**
 2. Click **Open** in the dialog that appears
+
 You only need to do this once.
 
-### First-time permission
+---
 
-macOS requires explicit permission to access removable volumes. When prompted, click **Allow** — this only happens once per drive. You can also pre-grant access for all removable volumes:
+## First-time setup
+
+When you first launch Spotlight Off, a setup guide will walk you through three things:
+
+### 1. Full Disk Access
+Spotlight Off needs Full Disk Access to read and modify Spotlight settings on connected drives.
+
+> **System Settings → Privacy & Security → Full Disk Access → Enable Spotlight Off**
+
+### 2. Removable Volumes
+Grant access to removable volumes so the app can detect and configure external drives when they connect.
 
 > **System Settings → Privacy & Security → Files and Folders → Spotlight Off → Enable Removable Volumes**
+
+### 3. About the admin password prompt
+When a drive is first processed, macOS will ask for your administrator password. This is handled securely by **osascript** — a built-in macOS tool that allows the app to run a single privileged command (`mdutil`) without the entire app needing root access. Your password is never stored or seen by Spotlight Off.
+
+> You can reopen the setup guide at any time from the menu bar icon → **Setup Guide…**
 
 ---
 
@@ -59,6 +76,7 @@ macOS requires explicit permission to access removable volumes. When prompted, c
 |---|---|
 | See recently processed drives | Click the menu bar icon |
 | Open full history & settings | Click **History & Settings…** or press ⌘, |
+| Reopen the setup guide | Click **Setup Guide…** in the menu |
 | Remove a history entry | Select it in the list and press Delete |
 | Clear all history | Click **Clear All** in the settings window |
 | Enable launch at login | Toggle in the settings window |
@@ -84,7 +102,7 @@ All history is stored locally in `UserDefaults`. No network requests are ever ma
 ## Requirements
 
 - macOS 13 Ventura or later
-- Administrator access (required once, to run `mdutil`)
+- Administrator access (required once per drive, to run `mdutil`)
 
 ---
 
@@ -97,6 +115,20 @@ open "Spotlight Off.xcodeproj"
 ```
 
 Select your development team in **Signing & Capabilities**, then build and run.
+
+---
+
+## Support development
+
+Spotlight Off is free and open source. If it saves you time, consider buying me a coffee ☕
+
+<div align="center">
+
+  [![PayPal](https://img.shields.io/badge/Donate-PayPal-0070BA?style=for-the-badge&logo=paypal&logoColor=white)](https://www.paypal.com/donate/?hosted_button_id=AEY7AC82BKH5C)
+  [![Venmo](https://img.shields.io/badge/Donate-Venmo-3D95CE?style=for-the-badge&logo=venmo&logoColor=white)](https://account.venmo.com/u/FAINI)
+  [![Buy Me a Coffee](https://img.shields.io/badge/Buy_Me_a_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/fainimade)
+
+</div>
 
 ---
 
