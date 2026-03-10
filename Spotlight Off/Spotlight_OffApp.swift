@@ -58,6 +58,35 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         setupMenuBar()
         driveMonitor.start()
+
+        // Show welcome screen on first launch only
+        if !UserDefaults.standard.bool(forKey: "hasSeenWelcome") {
+            showWelcome()
+        }
+    }
+
+    private var welcomeWindow: NSWindow?
+
+    func showWelcome() {
+        let view = NSHostingView(rootView: WelcomeView(onDismiss: { [weak self] in
+            self?.welcomeWindow?.close()
+            UserDefaults.standard.set(true, forKey: "hasSeenWelcome")
+        }))
+        view.frame = NSRect(x: 0, y: 0, width: 500, height: 680)
+
+        let window = NSWindow(
+            contentRect: view.frame,
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Welcome to Spotlight Off"
+        window.contentView = view
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.makeKeyAndOrderFront(nil)
+        activateApp()
+        welcomeWindow = window
     }
 
     // MARK: Menu Bar
@@ -107,10 +136,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                                       action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
+
+        let welcomeItem = NSMenuItem(title: "Setup Guide…",
+                                     action: #selector(showWelcomeFromMenu), keyEquivalent: "")
+        welcomeItem.target = self
+        menu.addItem(welcomeItem)
+
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit Spotlight Off",
                                 action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         statusItem.menu = menu
+    }
+
+    @objc func showWelcomeFromMenu() {
+        showWelcome()
     }
 
     @objc func openSettings() {
@@ -342,9 +381,13 @@ class DriveMonitor: ObservableObject {
 struct SettingsView: View {
     @ObservedObject var monitor: DriveMonitor
 
-    // Lazy init avoids a potential crash if SMAppService is unavailable
+    // SMAppService requires macOS 13+. Since that's our deployment target this
+    // guard is belt-and-suspenders, but prevents a crash if run on older OS.
     @State private var launchAtLogin: Bool = {
-        SMAppService.mainApp.status == .enabled
+        if #available(macOS 13.0, *) {
+            return SMAppService.mainApp.status == .enabled
+        }
+        return false
     }()
 
     private let dateFormatter: DateFormatter = {
@@ -382,16 +425,18 @@ struct SettingsView: View {
 
                 Toggle("Launch at login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { enabled in
-                        do {
-                            if enabled {
-                                try SMAppService.mainApp.register()
-                            } else {
-                                try SMAppService.mainApp.unregister()
+                        if #available(macOS 13.0, *) {
+                            do {
+                                if enabled {
+                                    try SMAppService.mainApp.register()
+                                } else {
+                                    try SMAppService.mainApp.unregister()
+                                }
+                                launchAtLogin = SMAppService.mainApp.status == .enabled
+                            } catch {
+                                LogStore.shared.log("Launch at login error: \(error)")
+                                launchAtLogin = SMAppService.mainApp.status == .enabled
                             }
-                            launchAtLogin = SMAppService.mainApp.status == .enabled
-                        } catch {
-                            LogStore.shared.log("Launch at login error: \(error)")
-                            launchAtLogin = SMAppService.mainApp.status == .enabled
                         }
                     }
             }
@@ -522,5 +567,223 @@ struct LogView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Welcome View
+
+struct WelcomeView: View {
+    var onDismiss: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color(red: 0.08, green: 0.10, blue: 0.16)
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+
+                // ── Header ──────────────────────────────────────────────
+                VStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(Color(red: 0.12, green: 0.16, blue: 0.24))
+                            .frame(width: 80, height: 80)
+                        // Use two overlapping symbols to represent spotlight + off
+                        ZStack {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 30, weight: .medium))
+                                .foregroundColor(Color.white.opacity(0.85))
+                            Image(systemName: "line.diagonal")
+                                .font(.system(size: 40, weight: .bold))
+                                .foregroundColor(Color(red: 0.94, green: 0.33, blue: 0.31))
+                        }
+                    }
+                    .padding(.top, 30)
+
+                    Text("Spotlight Off")
+                        .font(.system(size: 26, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+
+                    Text("A few quick steps to get up and running")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color.white.opacity(0.45))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.bottom, 20)
+
+                Divider().background(Color.white.opacity(0.08))
+
+                // ── Scrollable Steps ────────────────────────────────────
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        SetupStep(
+                            number: 1,
+                            title: "Grant Full Disk Access",
+                            description: "Spotlight Off needs Full Disk Access to read and modify Spotlight settings on connected drives.",
+                            action: "Open Full Disk Access →",
+                            actionURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
+                        )
+                        SetupStep(
+                            number: 2,
+                            title: "Allow Removable Volumes",
+                            description: "Grant access to removable volumes so the app can detect and configure external drives when they connect.",
+                            action: "Open Files & Folders →",
+                            actionURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders"
+                        )
+                        SetupStep(
+                            number: 3,
+                            title: "Enable Launch at Login",
+                            description: "Open History & Settings from the menu bar and toggle Launch at Login so Spotlight Off is always running in the background.",
+                            action: nil,
+                            actionURL: nil
+                        )
+                        SetupStep(
+                            number: 4,
+                            title: "About the Admin Password Prompt",
+                            description: "When a drive is first processed, macOS will ask for your administrator password. This is handled securely by osascript — a built-in macOS tool that allows the app to run a single privileged command (mdutil) without the entire app needing root access. Your password is never stored or seen by Spotlight Off.",
+                            action: nil,
+                            actionURL: nil
+                        )
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 8)
+                }
+
+                Divider().background(Color.white.opacity(0.08))
+
+                // ── Footer ───────────────────────────────────────────────
+                VStack(spacing: 12) {
+                    Text("Spotlight Off is free and open source. If it saves you time, consider supporting development.")
+                        .font(.system(size: 11))
+                        .foregroundColor(Color.white.opacity(0.4))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    HStack(spacing: 8) {
+                        DonateButton(
+                            label: "PayPal",
+                            icon: "💳",
+                            url: "https://www.paypal.com/donate/?hosted_button_id=AEY7AC82BKH5C",
+                            color: Color(red: 0.0, green: 0.47, blue: 0.75)
+                        )
+                        DonateButton(
+                            label: "Venmo",
+                            icon: "✦",
+                            url: "https://account.venmo.com/u/FAINI",
+                            color: Color(red: 0.22, green: 0.72, blue: 0.60)
+                        )
+                        DonateButton(
+                            label: "Coffee",
+                            icon: "☕",
+                            url: "https://buymeacoffee.com/fainimade",
+                            color: Color(red: 1.0, green: 0.75, blue: 0.15)
+                        )
+                    }
+
+                    Button(action: onDismiss) {
+                        Text("Get Started")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color(red: 0.94, green: 0.33, blue: 0.31))
+                            .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(22)
+            }
+        }
+        .frame(width: 500, height: 680)
+    }
+}
+
+// MARK: Setup Step Row
+
+struct SetupStep: View {
+    let number: Int
+    let title: String
+    let description: String
+    let action: String?
+    let actionURL: String?
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 16) {
+            ZStack {
+                Circle()
+                    .fill(Color(red: 0.94, green: 0.33, blue: 0.31).opacity(0.85))
+                    .frame(width: 26, height: 26)
+                Text("\(number)")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.white)
+            }
+            .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.white)
+
+                Text(description)
+                    .font(.system(size: 12))
+                    .foregroundColor(Color.white.opacity(0.5))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let action = action, let urlString = actionURL,
+                   let url = URL(string: urlString) {
+                    Button(action) {
+                        NSWorkspace.shared.open(url)
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Color(red: 0.94, green: 0.33, blue: 0.31))
+                    .padding(.top, 2)
+                }
+            }
+            Spacer()
+        }
+        .padding(.vertical, 14)
+        .overlay(
+            Rectangle()
+                .fill(Color.white.opacity(0.06))
+                .frame(height: 1),
+            alignment: .bottom
+        )
+    }
+}
+
+// MARK: Donate Button
+
+struct DonateButton: View {
+    let label: String
+    let icon: String
+    let url: String
+    let color: Color
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: {
+            if let u = URL(string: url) { NSWorkspace.shared.open(u) }
+        }) {
+            HStack(spacing: 6) {
+                Text(icon)
+                    .font(.system(size: 13))
+                Text(label)
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundColor(hovered ? .white : color)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 9)
+            .background(
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(hovered ? color.opacity(0.3) : color.opacity(0.12))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 7)
+                    .stroke(color.opacity(0.4), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 }
     }
 }
