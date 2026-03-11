@@ -54,16 +54,11 @@ You only need to do this once.
 When you first launch Spotlight Off, a setup guide will walk you through three things:
 
 ### 1. Full Disk Access
-Spotlight Off needs Full Disk Access to read and modify Spotlight settings on connected drives.
+Spotlight Off needs Full Disk Access to read and modify Spotlight settings on connected drives. This is the only permission required — Full Disk Access covers everything the app needs, including access to external and removable volumes.
 
 > **System Settings → Privacy & Security → Full Disk Access → Enable Spotlight Off**
 
-### 2. Removable Volumes
-Grant access to removable volumes so the app can detect and configure external drives when they connect.
-
-> **System Settings → Privacy & Security → Files and Folders → Spotlight Off → Enable Removable Volumes**
-
-### 3. About the admin password prompt
+### 2. About the admin password prompt
 When a drive is first processed, macOS will ask for your administrator password. This is handled securely by **osascript** — a built-in macOS tool that allows the app to run a single privileged command (`mdutil`) without the entire app needing root access. Your password is never stored or seen by Spotlight Off.
 
 > You can reopen the setup guide at any time from the menu bar icon → **Setup Guide…**

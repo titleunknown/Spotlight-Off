@@ -625,20 +625,13 @@ struct WelcomeView: View {
                         )
                         SetupStep(
                             number: 2,
-                            title: "Allow Removable Volumes",
-                            description: "Grant access to removable volumes so the app can detect and configure external drives when they connect.",
-                            action: "Open Files & Folders →",
-                            actionURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders"
-                        )
-                        SetupStep(
-                            number: 3,
                             title: "Enable Launch at Login",
                             description: "Open History & Settings from the menu bar and toggle Launch at Login so Spotlight Off is always running in the background.",
                             action: nil,
                             actionURL: nil
                         )
                         SetupStep(
-                            number: 4,
+                            number: 3,
                             title: "About the Admin Password Prompt",
                             description: "When a drive is first processed, macOS will ask for your administrator password. This is handled securely by osascript — a built-in macOS tool that allows the app to run a single privileged command (mdutil) without the entire app needing root access. Your password is never stored or seen by Spotlight Off.",
                             action: nil,
