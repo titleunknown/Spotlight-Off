@@ -54,9 +54,17 @@ You only need to do this once.
 When you first launch Spotlight Off, a setup guide will walk you through three things:
 
 ### 1. Full Disk Access
-Spotlight Off needs Full Disk Access to read and modify Spotlight settings on connected drives. This is the only permission required — Full Disk Access covers everything the app needs, including access to external and removable volumes.
+Both **Spotlight Off** and **osascript** need Full Disk Access. osascript is the built-in macOS tool the app uses to run `mdutil` with administrator privileges — if it doesn't have Full Disk Access, the command will fail even after you enter your password.
 
-> **System Settings → Privacy & Security → Full Disk Access → Enable Spotlight Off**
+**System Settings → Privacy & Security → Full Disk Access**, then click **+** to add each one.
+
+To add osascript manually:
+1. Click the **+** button in the Full Disk Access list
+2. Press **⌘ Shift G** to open the "Go to folder" dialog
+3. Paste `/usr/bin/osascript` and press **Enter**
+4. Click **Open**
+
+> **Note:** osascript may not appear in the Full Disk Access list automatically. Adding it manually via the path above is the most reliable approach.
 
 ### 2. About the admin password prompt
 When a drive is first processed, macOS will ask for your administrator password. This is handled securely by **osascript** — a built-in macOS tool that allows the app to run a single privileged command (`mdutil`) without the entire app needing root access. Your password is never stored or seen by Spotlight Off.
