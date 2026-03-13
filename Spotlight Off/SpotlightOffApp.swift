@@ -41,8 +41,6 @@ struct SpotlightOffApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
-        // Window managed manually in AppDelegate for cross-version compatibility.
-        // The Settings scene is kept only to satisfy SwiftUI's requirements.
         Settings { EmptyView() }
     }
 }
@@ -53,43 +51,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem!
     let driveMonitor = DriveMonitor()
     private var settingsWindow: NSWindow?
+    private var welcomeWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         setupMenuBar()
         driveMonitor.start()
-
-        // Show welcome screen on first launch only
         if !UserDefaults.standard.bool(forKey: "hasSeenWelcome") {
             showWelcome()
         }
     }
-
-    private var welcomeWindow: NSWindow?
-
-    func showWelcome() {
-        let view = NSHostingView(rootView: WelcomeView(onDismiss: { [weak self] in
-            self?.welcomeWindow?.close()
-            UserDefaults.standard.set(true, forKey: "hasSeenWelcome")
-        }))
-        view.frame = NSRect(x: 0, y: 0, width: 500, height: 680)
-
-        let window = NSWindow(
-            contentRect: view.frame,
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "Welcome to Spotlight Off"
-        window.contentView = view
-        window.center()
-        window.isReleasedWhenClosed = false
-        window.makeKeyAndOrderFront(nil)
-        activateApp()
-        welcomeWindow = window
-    }
-
-    // MARK: Menu Bar
 
     func setupMenuBar() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -106,7 +77,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func buildMenu() {
         let menu = NSMenu()
-
         let header = NSMenuItem(title: "Spotlight Off — Active", action: nil, keyEquivalent: "")
         header.isEnabled = false
         menu.addItem(header)
@@ -121,7 +91,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             for entry in history.prefix(5) {
                 let item = NSMenuItem(title: "✓  \(entry.name)", action: nil, keyEquivalent: "")
                 item.isEnabled = false
-                item.toolTip   = entry.path
+                item.toolTip = entry.path
                 menu.addItem(item)
             }
             if history.count > 5 {
@@ -132,58 +102,59 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         menu.addItem(.separator())
-        let settingsItem = NSMenuItem(title: "History & Settings…",
-                                      action: #selector(openSettings), keyEquivalent: ",")
+        let setupItem = NSMenuItem(title: "Setup Guide…", action: #selector(showWelcome), keyEquivalent: "")
+        setupItem.target = self
+        menu.addItem(setupItem)
+        let settingsItem = NSMenuItem(title: "History & Settings…", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
-
-        let welcomeItem = NSMenuItem(title: "Setup Guide…",
-                                     action: #selector(showWelcomeFromMenu), keyEquivalent: "")
-        welcomeItem.target = self
-        menu.addItem(welcomeItem)
-
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit Spotlight Off",
                                 action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         statusItem.menu = menu
     }
 
-    @objc func showWelcomeFromMenu() {
-        showWelcome()
-    }
-
     @objc func openSettings() {
         if let window = settingsWindow, window.isVisible {
             window.makeKeyAndOrderFront(nil)
-            activateApp()
+            NSApp.activate()
             return
         }
-
         let view = NSHostingView(rootView: SettingsView(monitor: driveMonitor))
         view.frame = NSRect(x: 0, y: 0, width: 440, height: 600)
-
-        let window = NSWindow(
-            contentRect: view.frame,
-            styleMask: [.titled, .closable, .miniaturizable],
-            backing: .buffered,
-            defer: false
-        )
+        let window = NSWindow(contentRect: view.frame,
+                              styleMask: [.titled, .closable, .miniaturizable],
+                              backing: .buffered, defer: false)
         window.title = "History & Settings — Spotlight Off"
         window.contentView = view
         window.center()
         window.isReleasedWhenClosed = false
         window.makeKeyAndOrderFront(nil)
-        activateApp()
+        NSApp.activate()
         settingsWindow = window
     }
 
-    /// Brings the app to front, compatible with macOS 13 and 14+.
-    private func activateApp() {
-        if #available(macOS 14.0, *) {
+    @objc func showWelcome() {
+        if let window = welcomeWindow, window.isVisible {
+            window.makeKeyAndOrderFront(nil)
             NSApp.activate()
-        } else {
-            NSApp.activate(ignoringOtherApps: true)
+            return
         }
+        let view = NSHostingView(rootView: WelcomeView {
+            self.welcomeWindow?.close()
+            UserDefaults.standard.set(true, forKey: "hasSeenWelcome")
+        })
+        view.frame = NSRect(x: 0, y: 0, width: 500, height: 680)
+        let window = NSWindow(contentRect: view.frame,
+                              styleMask: [.titled, .closable],
+                              backing: .buffered, defer: false)
+        window.title = "Welcome to Spotlight Off"
+        window.contentView = view
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate()
+        welcomeWindow = window
     }
 }
 
@@ -192,21 +163,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 class DriveMonitor: ObservableObject {
     @Published var history: [DriveEntry] = []
     var onHistoryChanged: (() -> Void)?
-
     private let historyKey = "spotlightoff.history"
 
     init() { loadHistory() }
 
     func start() {
         NSWorkspace.shared.notificationCenter.addObserver(
-            self,
-            selector: #selector(volumeMounted(_:)),
-            name: NSWorkspace.didMountNotification,
-            object: nil
-        )
+            self, selector: #selector(volumeMounted(_:)),
+            name: NSWorkspace.didMountNotification, object: nil)
     }
-
-    // MARK: Volume Mounted
 
     @objc private func volumeMounted(_ notification: NSNotification) {
         guard let path = notification.userInfo?["NSDevicePath"] as? String else { return }
@@ -218,10 +183,6 @@ class DriveMonitor: ObservableObject {
             return
         }
 
-        // On macOS Big Sur+, /Volumes/X is a firmlink (not a symlink) pointing to
-        // /System/Volumes/Data/Volumes/X. realpath() cannot follow firmlinks,
-        // so we construct the real path manually for mdutil -s.
-        // However mdutil -i off requires the /Volumes/X form, so we keep both.
         let resolvedPath: String
         if path.hasPrefix("/Volumes/") {
             let candidate = "/System/Volumes/Data" + path
@@ -234,52 +195,44 @@ class DriveMonitor: ObservableObject {
         let name = url.lastPathComponent.isEmpty ? "External Drive" : url.lastPathComponent
         LogStore.shared.log("Accepted — scheduling disable for: \(name)")
 
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1.5) { [weak self] in
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 4.0) { [weak self] in
             self?.handleVolume(resolvedPath: resolvedPath, volumesPath: path, name: name)
         }
     }
 
-    // MARK: Volume Filtering
-
     private func isExternalVolume(_ url: URL) -> Bool {
         guard let vals = try? url.resourceValues(forKeys: [
-            .volumeIsRootFileSystemKey,
-            .volumeIsInternalKey,
-            .volumeIsLocalKey,
-            .volumeIsRemovableKey
+            .volumeIsRootFileSystemKey, .volumeIsInternalKey,
+            .volumeIsLocalKey, .volumeIsRemovableKey
         ]) else {
             LogStore.shared.log("Could not read volume flags for \(url.path)")
             return false
         }
-
-        let isRoot      = vals.volumeIsRootFileSystem ?? false
-        let isLocal     = vals.volumeIsLocal          ?? false
+        let isRoot     = vals.volumeIsRootFileSystem ?? false
+        let isInternal = vals.volumeIsInternal       ?? false
+        let isLocal    = vals.volumeIsLocal           ?? false
         let isRemovable = vals.volumeIsRemovable      ?? false
-        let isInternal  = vals.volumeIsInternal       ?? false
-
         LogStore.shared.log("Flags — root:\(isRoot) internal:\(isInternal) local:\(isLocal) removable:\(isRemovable)")
-
-        if isRoot   { return false }
-        if !isLocal { return false }
+        if isRoot || isInternal || !isLocal { return false }
         return true
     }
 
-    // MARK: Spotlight Check & Disable
-
-    /// - Parameter resolvedPath: The /System/Volumes/Data/... path, used for mdutil -s
-    /// - Parameter volumesPath:  The /Volumes/... path, required by mdutil -i off
     private func handleVolume(resolvedPath: String, volumesPath: String, name: String) {
-        let enabled = isIndexingEnabled(path: resolvedPath)
-        LogStore.shared.log("Indexing enabled for '\(name)': \(enabled)")
-
-        guard enabled else {
-            LogStore.shared.log("Already disabled — nothing to do.")
+        guard let status = mdutilStatus(path: resolvedPath) else {
+            LogStore.shared.log("Could not read mdutil status for '\(name)' — skipping")
             return
         }
-
+        if status.contains("disabled") {
+            LogStore.shared.log("Indexing already disabled for '\(name)'")
+            return
+        }
+        if status.contains("unexpected") {
+            LogStore.shared.log("Unexpected indexing state for '\(name)' — skipping")
+            return
+        }
+        LogStore.shared.log("Indexing enabled for '\(name)' — disabling")
         let ok = runMdutilAsAdmin(path: volumesPath)
         LogStore.shared.log("Disable succeeded: \(ok)")
-
         if ok {
             DispatchQueue.main.async { [weak self] in
                 self?.addToHistory(name: name, path: volumesPath)
@@ -287,37 +240,35 @@ class DriveMonitor: ObservableObject {
         }
     }
 
-    private func isIndexingEnabled(path: String) -> Bool {
+    private func mdutilStatus(path: String) -> String? {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/mdutil")
-        p.arguments     = ["-s", path]
+        p.arguments = ["-s", path]
         let pipe = Pipe()
         p.standardOutput = pipe
         p.standardError  = pipe
         do {
-            try p.run()
-            p.waitUntilExit()
+            try p.run(); p.waitUntilExit()
             let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
             let trimmed = out.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            LogStore.shared.log("mdutil -s: \(trimmed)")
-            return !trimmed.contains("disabled")
+            LogStore.shared.log("mdutil -s [\(path)]: \(trimmed)")
+            if trimmed.contains("could not") || trimmed.contains("no such") { return nil }
+            return trimmed
         } catch {
             LogStore.shared.log("mdutil -s error: \(error)")
-            return true
+            return nil
         }
     }
 
-    // Removed runMdutil (non-admin) — mdutil -i off always requires root,
-    // so the direct attempt always failed and just wasted time.
-
     private func runMdutilAsAdmin(path: String) -> Bool {
-        let escaped = path.replacingOccurrences(of: "\"", with: "\\\"")
-        let script  = "do shell script (\"/usr/bin/mdutil -i off \" & quoted form of \"\(escaped)\") with administrator privileges"
-        LogStore.shared.log("Running osascript for: \(path)")
+        // Full Disk Access is sufficient for mdutil -i off — no root needed.
+        // We call mdutil directly via Process() using the /Volumes path.
+        // The OS resolves it to /System/Volumes/Data/Volumes/X internally.
+        LogStore.shared.log("Running mdutil for: \(path)")
 
         let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        p.arguments = ["-e", script]
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/mdutil")
+        p.arguments = ["-i", "off", path]
         let outPipe = Pipe()
         let errPipe = Pipe()
         p.standardOutput = outPipe
@@ -327,20 +278,18 @@ class DriveMonitor: ObservableObject {
             p.waitUntilExit()
             let out = String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
             let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            LogStore.shared.log("osascript out: \(out.trimmingCharacters(in: .whitespacesAndNewlines))")
-            LogStore.shared.log("osascript err: \(err.trimmingCharacters(in: .whitespacesAndNewlines))")
-            LogStore.shared.log("osascript exit: \(p.terminationStatus)")
-            let combined = (out + err).lowercased()
+            let combined = (out + err).trimmingCharacters(in: .whitespacesAndNewlines)
+            LogStore.shared.log("mdutil out: \(combined)")
+            LogStore.shared.log("mdutil exit: \(p.terminationStatus)")
+            let lower = combined.lowercased()
             return p.terminationStatus == 0
-                && !combined.contains("error")
-                && !combined.contains("could not")
+                && !lower.contains("error")
+                && !lower.contains("could not")
         } catch {
-            LogStore.shared.log("osascript threw: \(error)")
+            LogStore.shared.log("mdutil threw: \(error)")
             return false
         }
     }
-
-    // MARK: History
 
     private func addToHistory(name: String, path: String) {
         history.removeAll { $0.path == path }
@@ -351,15 +300,11 @@ class DriveMonitor: ObservableObject {
     }
 
     func removeEntries(at offsets: IndexSet) {
-        history.remove(atOffsets: offsets)
-        saveHistory()
-        onHistoryChanged?()
+        history.remove(atOffsets: offsets); saveHistory(); onHistoryChanged?()
     }
 
     func clearHistory() {
-        history.removeAll()
-        saveHistory()
-        onHistoryChanged?()
+        history.removeAll(); saveHistory(); onHistoryChanged?()
     }
 
     private func saveHistory() {
@@ -380,37 +325,23 @@ class DriveMonitor: ObservableObject {
 
 struct SettingsView: View {
     @ObservedObject var monitor: DriveMonitor
-
-    // SMAppService requires macOS 13+. Since that's our deployment target this
-    // guard is belt-and-suspenders, but prevents a crash if run on older OS.
-    @State private var launchAtLogin: Bool = {
-        if #available(macOS 13.0, *) {
-            return SMAppService.mainApp.status == .enabled
-        }
-        return false
-    }()
+    @State private var launchAtLogin: Bool = SMAppService.mainApp.status == .enabled
 
     private let dateFormatter: DateFormatter = {
         let f = DateFormatter()
-        f.dateStyle = .medium
-        f.timeStyle = .short
+        f.dateStyle = .medium; f.timeStyle = .short
         return f
     }()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-
-            // Header
             HStack(spacing: 12) {
                 Image(systemName: "externaldrive.badge.xmark")
-                    .font(.title2)
-                    .foregroundColor(.accentColor)
+                    .font(.title2).foregroundColor(.accentColor)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Spotlight Off")
-                        .font(.headline)
+                    Text("Spotlight Off").font(.headline)
                     Text("Automatically disables Spotlight indexing on external drives")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .font(.caption).foregroundColor(.secondary)
                 }
                 Spacer()
             }
@@ -418,25 +349,17 @@ struct SettingsView: View {
 
             Divider()
 
-            // Settings
             VStack(alignment: .leading, spacing: 10) {
-                Text("SETTINGS")
-                    .font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
-
+                Text("SETTINGS").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
                 Toggle("Launch at login", isOn: $launchAtLogin)
-                    .onChange(of: launchAtLogin) { enabled in
-                        if #available(macOS 13.0, *) {
-                            do {
-                                if enabled {
-                                    try SMAppService.mainApp.register()
-                                } else {
-                                    try SMAppService.mainApp.unregister()
-                                }
-                                launchAtLogin = SMAppService.mainApp.status == .enabled
-                            } catch {
-                                LogStore.shared.log("Launch at login error: \(error)")
-                                launchAtLogin = SMAppService.mainApp.status == .enabled
-                            }
+                    .onChange(of: launchAtLogin) { _, enabled in
+                        do {
+                            if enabled { try SMAppService.mainApp.register() }
+                            else       { try SMAppService.mainApp.unregister() }
+                            launchAtLogin = SMAppService.mainApp.status == .enabled
+                        } catch {
+                            LogStore.shared.log("Launch at login error: \(error)")
+                            launchAtLogin = SMAppService.mainApp.status == .enabled
                         }
                     }
             }
@@ -444,97 +367,64 @@ struct SettingsView: View {
 
             Divider()
 
-            // History header
             HStack {
-                Text("PROCESSED DRIVES")
-                    .font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
+                Text("PROCESSED DRIVES").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
                 Spacer()
                 if !monitor.history.isEmpty {
                     Button("Clear All") { monitor.clearHistory() }
-                        .foregroundColor(.red)
-                        .buttonStyle(.borderless)
+                        .foregroundColor(.red).buttonStyle(.borderless)
                         .font(.caption).fontWeight(.semibold)
                 }
             }
-            .padding(.horizontal)
-            .padding(.top, 12)
-            .padding(.bottom, 6)
+            .padding(.horizontal).padding(.top, 12).padding(.bottom, 6)
 
-            // History list
             if monitor.history.isEmpty {
                 VStack(spacing: 8) {
-                    Image(systemName: "externaldrive")
-                        .font(.system(size: 32))
+                    Image(systemName: "externaldrive").font(.system(size: 32))
                         .foregroundColor(.secondary.opacity(0.4))
-                    Text("No drives processed yet")
-                        .foregroundColor(.secondary)
-                        .font(.subheadline)
+                    Text("No drives processed yet").foregroundColor(.secondary).font(.subheadline)
                     Text("Connect an external drive and Spotlight Off\nwill disable indexing automatically.")
-                        .foregroundColor(.secondary.opacity(0.7))
-                        .font(.caption)
-                        .multilineTextAlignment(.center)
+                        .foregroundColor(.secondary.opacity(0.7)).font(.caption).multilineTextAlignment(.center)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 32)
+                .frame(maxWidth: .infinity).padding(.vertical, 32)
             } else {
                 List {
                     ForEach(monitor.history) { entry in
                         HStack(spacing: 10) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
+                            Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(entry.name)
-                                    .fontWeight(.medium)
-                                Text(entry.path)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
+                                Text(entry.name).fontWeight(.medium)
+                                Text(entry.path).font(.caption).foregroundColor(.secondary)
+                                    .lineLimit(1).truncationMode(.middle)
                             }
                             Spacer()
                             Text(dateFormatter.string(from: entry.date))
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
+                                .font(.caption2).foregroundColor(.secondary)
                         }
                         .padding(.vertical, 2)
                     }
                     .onDelete { offsets in monitor.removeEntries(at: offsets) }
                 }
                 .frame(height: 220)
-
                 Text("Select an entry and press Delete to remove it, or use Clear All.")
-                    .font(.caption2)
-                    .foregroundColor(.secondary.opacity(0.6))
-                    .padding(.horizontal)
-                    .padding(.bottom, 4)
+                    .font(.caption2).foregroundColor(.secondary.opacity(0.6))
+                    .padding(.horizontal).padding(.bottom, 4)
             }
 
             Divider()
-
-            Text("Administrator approval is required the first time a drive is processed.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .padding()
-
+            Text("Full Disk Access is required for Spotlight Off to disable indexing.")
+                .font(.caption).foregroundColor(.secondary).padding()
             Divider()
 
-            // Activity Log
             HStack {
-                Text("ACTIVITY LOG")
-                    .font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
+                Text("ACTIVITY LOG").font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
                 Spacer()
                 Button("Clear") { LogStore.shared.entries.removeAll() }
-                    .buttonStyle(.borderless)
-                    .font(.caption).fontWeight(.semibold)
-                    .foregroundColor(.secondary)
+                    .buttonStyle(.borderless).font(.caption).fontWeight(.semibold).foregroundColor(.secondary)
             }
-            .padding(.horizontal)
-            .padding(.top, 12)
-            .padding(.bottom, 4)
+            .padding(.horizontal).padding(.top, 12).padding(.bottom, 4)
 
-            LogView()
-                .frame(height: 120)
-                .padding(.bottom, 8)
+            LogView().frame(height: 120).padding(.bottom, 8)
         }
         .frame(width: 440)
     }
@@ -561,7 +451,7 @@ struct LogView: View {
                 .padding(8)
             }
             .background(Color(NSColor.textBackgroundColor).opacity(0.5))
-            .onChange(of: store.entries.count) { _ in
+            .onChange(of: store.entries.count) { _, _ in
                 if let last = store.entries.indices.last {
                     proxy.scrollTo(last, anchor: .bottom)
                 }
@@ -577,18 +467,12 @@ struct WelcomeView: View {
 
     var body: some View {
         ZStack {
-            Color(red: 0.08, green: 0.10, blue: 0.16)
-                .ignoresSafeArea()
-
+            Color(red: 0.08, green: 0.10, blue: 0.16).ignoresSafeArea()
             VStack(spacing: 0) {
-
-                // ── Header ──────────────────────────────────────────────
                 VStack(spacing: 12) {
                     ZStack {
-                        Circle()
-                            .fill(Color(red: 0.12, green: 0.16, blue: 0.24))
+                        Circle().fill(Color(red: 0.12, green: 0.16, blue: 0.24))
                             .frame(width: 80, height: 80)
-                        // Use two overlapping symbols to represent spotlight + off
                         ZStack {
                             Image(systemName: "magnifyingglass")
                                 .font(.system(size: 30, weight: .medium))
@@ -599,85 +483,57 @@ struct WelcomeView: View {
                         }
                     }
                     .padding(.top, 30)
-
                     Text("Spotlight Off")
-                        .font(.system(size: 26, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-
+                        .font(.system(size: 26, weight: .bold, design: .rounded)).foregroundColor(.white)
                     Text("A few quick steps to get up and running")
-                        .font(.system(size: 12))
-                        .foregroundColor(Color.white.opacity(0.45))
+                        .font(.system(size: 12)).foregroundColor(Color.white.opacity(0.45))
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.bottom, 20)
+                .frame(maxWidth: .infinity).padding(.bottom, 20)
 
                 Divider().background(Color.white.opacity(0.08))
 
-                // ── Scrollable Steps ────────────────────────────────────
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 0) {
                         SetupStep(
-                            number: 1,
-                            title: "Grant Full Disk Access",
-                            description: "Spotlight Off needs Full Disk Access to read and modify Spotlight settings on connected drives.",
+                            number: 1, title: "Grant Full Disk Access",
+                            description: "Spotlight Off needs Full Disk Access to disable Spotlight on your drives. Open the link below, then make sure Spotlight Off appears in the list and is toggled on.",
                             action: "Open Full Disk Access →",
                             actionURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
                         )
                         SetupStep(
-                            number: 2,
-                            title: "Enable Launch at Login",
+                            number: 2, title: "Enable Launch at Login",
                             description: "Open History & Settings from the menu bar and toggle Launch at Login so Spotlight Off is always running in the background.",
-                            action: nil,
-                            actionURL: nil
+                            action: nil, actionURL: nil
                         )
                         SetupStep(
-                            number: 3,
-                            title: "About the Admin Password Prompt",
-                            description: "When a drive is first processed, macOS will ask for your administrator password. This is handled securely by osascript — a built-in macOS tool that allows the app to run a single privileged command (mdutil) without the entire app needing root access. Your password is never stored or seen by Spotlight Off.",
-                            action: nil,
-                            actionURL: nil
+                            number: 3, title: "That's it!",
+                            description: "When you connect an external drive, Spotlight Off will automatically disable indexing — no password prompt required. Full Disk Access gives the app everything it needs.",
+                            action: nil, actionURL: nil
                         )
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 24).padding(.vertical, 8)
                 }
 
                 Divider().background(Color.white.opacity(0.08))
 
-                // ── Footer ───────────────────────────────────────────────
                 VStack(spacing: 12) {
                     Text("Spotlight Off is free and open source. If it saves you time, consider supporting development.")
-                        .font(.system(size: 11))
-                        .foregroundColor(Color.white.opacity(0.4))
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-
+                        .font(.system(size: 11)).foregroundColor(Color.white.opacity(0.4))
+                        .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 8) {
-                        DonateButton(
-                            label: "PayPal",
-                            icon: "💳",
+                        DonateButton(label: "PayPal", icon: "💳",
                             url: "https://www.paypal.com/donate/?hosted_button_id=AEY7AC82BKH5C",
-                            color: Color(red: 0.0, green: 0.47, blue: 0.75)
-                        )
-                        DonateButton(
-                            label: "Venmo",
-                            icon: "✦",
+                            color: Color(red: 0.0, green: 0.47, blue: 0.75))
+                        DonateButton(label: "Venmo", icon: "✦",
                             url: "https://account.venmo.com/u/FAINI",
-                            color: Color(red: 0.22, green: 0.72, blue: 0.60)
-                        )
-                        DonateButton(
-                            label: "Coffee",
-                            icon: "☕",
+                            color: Color(red: 0.22, green: 0.72, blue: 0.60))
+                        DonateButton(label: "Coffee", icon: "☕",
                             url: "https://buymeacoffee.com/fainimade",
-                            color: Color(red: 1.0, green: 0.75, blue: 0.15)
-                        )
+                            color: Color(red: 1.0, green: 0.75, blue: 0.15))
                     }
-
                     Button(action: onDismiss) {
-                        Text("Get Started")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
+                        Text("Get Started").font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white).frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
                             .background(Color(red: 0.94, green: 0.33, blue: 0.31))
                             .cornerRadius(8)
@@ -691,92 +547,55 @@ struct WelcomeView: View {
     }
 }
 
-// MARK: Setup Step Row
+// MARK: - Setup Step
 
 struct SetupStep: View {
-    let number: Int
-    let title: String
-    let description: String
-    let action: String?
-    let actionURL: String?
+    let number: Int; let title: String; let description: String
+    let action: String?; let actionURL: String?
 
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
             ZStack {
-                Circle()
-                    .fill(Color(red: 0.94, green: 0.33, blue: 0.31).opacity(0.85))
+                Circle().fill(Color(red: 0.94, green: 0.33, blue: 0.31).opacity(0.85))
                     .frame(width: 26, height: 26)
-                Text("\(number)")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(.white)
+                Text("\(number)").font(.system(size: 11, weight: .bold)).foregroundColor(.white)
             }
             .padding(.top, 2)
-
             VStack(alignment: .leading, spacing: 5) {
-                Text(title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.white)
-
-                Text(description)
-                    .font(.system(size: 12))
-                    .foregroundColor(Color.white.opacity(0.5))
+                Text(title).font(.system(size: 13, weight: .semibold)).foregroundColor(.white)
+                Text(description).font(.system(size: 12)).foregroundColor(Color.white.opacity(0.5))
                     .fixedSize(horizontal: false, vertical: true)
-
-                if let action = action, let urlString = actionURL,
-                   let url = URL(string: urlString) {
-                    Button(action) {
-                        NSWorkspace.shared.open(url)
-                    }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(Color(red: 0.94, green: 0.33, blue: 0.31))
-                    .padding(.top, 2)
+                if let action = action, let urlString = actionURL, let url = URL(string: urlString) {
+                    Button(action) { NSWorkspace.shared.open(url) }
+                        .buttonStyle(.plain).font(.system(size: 12, weight: .medium))
+                        .foregroundColor(Color(red: 0.94, green: 0.33, blue: 0.31)).padding(.top, 2)
                 }
             }
             Spacer()
         }
         .padding(.vertical, 14)
-        .overlay(
-            Rectangle()
-                .fill(Color.white.opacity(0.06))
-                .frame(height: 1),
-            alignment: .bottom
-        )
+        .overlay(Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1), alignment: .bottom)
     }
 }
 
-// MARK: Donate Button
+// MARK: - Donate Button
 
 struct DonateButton: View {
-    let label: String
-    let icon: String
-    let url: String
-    let color: Color
+    let label: String; let icon: String; let url: String; let color: Color
     @State private var hovered = false
 
     var body: some View {
-        Button(action: {
-            if let u = URL(string: url) { NSWorkspace.shared.open(u) }
-        }) {
+        Button(action: { if let u = URL(string: url) { NSWorkspace.shared.open(u) } }) {
             HStack(spacing: 6) {
-                Text(icon)
-                    .font(.system(size: 13))
-                Text(label)
-                    .font(.system(size: 12, weight: .semibold))
+                Text(icon).font(.system(size: 13))
+                Text(label).font(.system(size: 12, weight: .semibold))
             }
             .foregroundColor(hovered ? .white : color)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 9)
-            .background(
-                RoundedRectangle(cornerRadius: 7)
-                    .fill(hovered ? color.opacity(0.3) : color.opacity(0.12))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 7)
-                    .stroke(color.opacity(0.4), lineWidth: 1)
-            )
+            .frame(maxWidth: .infinity).padding(.vertical, 9)
+            .background(RoundedRectangle(cornerRadius: 7)
+                .fill(hovered ? color.opacity(0.3) : color.opacity(0.12)))
+            .overlay(RoundedRectangle(cornerRadius: 7).stroke(color.opacity(0.4), lineWidth: 1))
         }
-        .buttonStyle(.plain)
-        .onHover { hovered = $0 }
+        .buttonStyle(.plain).onHover { hovered = $0 }
     }
 }
