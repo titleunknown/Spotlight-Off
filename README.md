@@ -5,7 +5,7 @@
 
   **Automatically disables Spotlight indexing on external drives the moment they're connected.**
 
-  ![macOS](https://img.shields.io/badge/macOS-13.0%2B-blue?style=flat-square&logo=apple)
+  ![macOS](https://img.shields.io/badge/macOS-14.0%2B-blue?style=flat-square&logo=apple)
   ![Swift](https://img.shields.io/badge/Swift-5.9-orange?style=flat-square&logo=swift)
   ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 
@@ -19,10 +19,12 @@ Every time you plug in an external drive, macOS quietly starts building a Spotli
 
 - 🔌 **Detects** any external drive the moment it's mounted
 - 🔍 **Checks** whether Spotlight indexing is currently enabled
-- 🚫 **Disables** it instantly using `mdutil`, with a one-time admin prompt
+- 🚫 **Disables** it instantly using `mdutil` — no password prompt required
 - 📋 **Logs** every action in a live activity log inside the app
 - 🚀 **Launches at login** so it's always running in the background
-- 👋 **First-launch setup guide** walks you through all required permissions
+- 👋 **First-launch setup guide** walks you through the one required permission
+
+Works with **APFS, HFS+, and exFAT** volumes.
 
 ---
 
@@ -37,7 +39,7 @@ Every time you plug in an external drive, macOS quietly starts building a Spotli
 1. Download the latest release from the [Releases](https://github.com/titleunknown/Spotlight-Off/releases) page
 2. Move **Spotlight Off.app** to your `/Applications` folder
 3. Launch it — the icon will appear in your menu bar
-4. A **setup guide** will appear on first launch to walk you through the required permissions
+4. A **setup guide** will appear on first launch to walk you through the one required permission
 5. Optionally enable **Launch at Login** in the settings window
 
 ### ⚠️ Gatekeeper warning
@@ -51,25 +53,15 @@ You only need to do this once.
 
 ## First-time setup
 
-When you first launch Spotlight Off, a setup guide will walk you through three things:
+Spotlight Off only needs one permission: **Full Disk Access**.
 
-### 1. Full Disk Access
-Both **Spotlight Off** and **osascript** need Full Disk Access. osascript is the built-in macOS tool the app uses to run `mdutil` with administrator privileges — if it doesn't have Full Disk Access, the command will fail even after you enter your password.
+### Full Disk Access
 
-**System Settings → Privacy & Security → Full Disk Access**, then click **+** to add each one.
+Open **System Settings → Privacy & Security → Full Disk Access** and make sure **Spotlight Off** is toggled on. That's it — no admin password prompt, no additional tools needed.
 
-To add osascript manually:
-1. Click the **+** button in the Full Disk Access list
-2. Press **⌘ Shift G** to open the "Go to folder" dialog
-3. Paste `/usr/bin/osascript` and press **Enter**
-4. Click **Open**
+> Full Disk Access is what allows `mdutil` to disable Spotlight indexing without requiring root. Once granted, drives are processed automatically and silently every time they connect.
 
-> **Note:** osascript may not appear in the Full Disk Access list automatically. Adding it manually via the path above is the most reliable approach.
-
-### 2. About the admin password prompt
-When a drive is first processed, macOS will ask for your administrator password. This is handled securely by **osascript** — a built-in macOS tool that allows the app to run a single privileged command (`mdutil`) without the entire app needing root access. Your password is never stored or seen by Spotlight Off.
-
-> You can reopen the setup guide at any time from the menu bar icon → **Setup Guide…**
+> You can reopen the setup guide at any time via the menu bar icon → **Setup Guide…**
 
 ---
 
@@ -92,20 +84,20 @@ When a drive is first processed, macOS will ask for your administrator password.
 
 When a volume mounts, Spotlight Off:
 
-1. Reads the volume's metadata flags to confirm it's a local, non-root external volume
-2. Waits 1.5 seconds for the volume to fully settle
+1. Reads the volume's metadata flags to confirm it's a local, non-root, non-internal volume
+2. Waits 4 seconds for the volume to fully initialise
 3. Runs `mdutil -s` to check whether indexing is currently enabled
-4. If enabled, runs `mdutil -i off` via `osascript` with administrator privileges
+4. If enabled, runs `mdutil -i off` directly — no shell, no escalation
 5. Records the result in the persistent history log
 
-All history is stored locally in `UserDefaults`. No network requests are ever made.
+Full Disk Access grants `mdutil` the permissions it needs to disable indexing without requiring root. All history is stored locally in `UserDefaults`. No network requests are ever made.
 
 ---
 
 ## Requirements
 
-- macOS 13 Ventura or later
-- Administrator access (required once per drive, to run `mdutil`)
+- macOS 14 Sonoma or later
+- Full Disk Access (granted once in System Settings)
 
 ---
 
@@ -117,7 +109,7 @@ cd Spotlight-Off
 open "Spotlight Off.xcodeproj"
 ```
 
-Select your development team in **Signing & Capabilities**, then build and run.
+Set your deployment target to **macOS 14.0**, select your development team in **Signing & Capabilities**, then build and run.
 
 ---
 
