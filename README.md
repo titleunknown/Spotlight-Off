@@ -129,4 +129,4 @@ Spotlight Off is free and open source. If it saves you time, consider buying me 
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+FolderMeter is licensed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). Free for personal and non-commercial use. For commercial licensing contact [fainimade.com](https://www.fainimade.com).
