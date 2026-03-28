@@ -852,21 +852,10 @@ struct LogView: View {
 
 class FDAChecker: ObservableObject {
     @Published var hasAccess: Bool = false
-    private var timer: Timer?
 
-    init() {
-        check()
-        // Poll every 2 seconds so the badge updates live when the user grants access
-        timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
-            self?.check()
-        }
-    }
+    init() { check() }
 
-    deinit { timer?.invalidate() }
-
-    private func check() {
-        // Attempting to list /Library/Application Support/com.apple.TCC
-        // (a protected directory) succeeds only if Full Disk Access is granted.
+    func check() {
         let probe = "/Library/Application Support/com.apple.TCC"
         let granted = (try? FileManager.default.contentsOfDirectory(atPath: probe)) != nil
         DispatchQueue.main.async { self.hasAccess = granted }
@@ -878,7 +867,7 @@ class FDAChecker: ObservableObject {
 struct WelcomeView: View {
     var onDismiss: () -> Void
     @StateObject private var fda = FDAChecker()
-
+    
     var body: some View {
         ZStack {
             Color(red: 0.08, green: 0.10, blue: 0.16).ignoresSafeArea()
@@ -903,9 +892,9 @@ struct WelcomeView: View {
                         .font(.system(size: 12)).foregroundColor(Color.white.opacity(0.45))
                 }
                 .frame(maxWidth: .infinity).padding(.bottom, 20)
-
+                
                 Divider().background(Color.white.opacity(0.08))
-
+                
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 0) {
                         SetupStep(
@@ -928,23 +917,23 @@ struct WelcomeView: View {
                     }
                     .padding(.horizontal, 24).padding(.vertical, 8)
                 }
-
+                
                 Divider().background(Color.white.opacity(0.08))
-
+                
                 VStack(spacing: 12) {
                     Text("Free, open source, and CC BY-NC 4.0 licensed. Made by Faini Made. If it saves you time, consider supporting development.")
                         .font(.system(size: 11)).foregroundColor(Color.white.opacity(0.4))
                         .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 8) {
                         DonateButton(label: "PayPal", icon: "💳",
-                            url: "https://www.paypal.com/donate/?hosted_button_id=AEY7AC82BKH5C",
-                            color: Color(red: 0.0, green: 0.47, blue: 0.75))
+                                     url: "https://www.paypal.com/donate/?hosted_button_id=AEY7AC82BKH5C",
+                                     color: Color(red: 0.0, green: 0.47, blue: 0.75))
                         DonateButton(label: "Venmo", icon: "✦",
-                            url: "https://account.venmo.com/u/FAINI",
-                            color: Color(red: 0.22, green: 0.72, blue: 0.60))
+                                     url: "https://account.venmo.com/u/FAINI",
+                                     color: Color(red: 0.22, green: 0.72, blue: 0.60))
                         DonateButton(label: "Coffee", icon: "☕",
-                            url: "https://buymeacoffee.com/fainimade",
-                            color: Color(red: 1.0, green: 0.75, blue: 0.15))
+                                     url: "https://buymeacoffee.com/fainimade",
+                                     color: Color(red: 1.0, green: 0.75, blue: 0.15))
                     }
                     Button(action: onDismiss) {
                         Text("Get Started").font(.system(size: 14, weight: .semibold))
@@ -959,110 +948,113 @@ struct WelcomeView: View {
             }
         }
         .frame(width: 500, height: 680)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            fda.check()
+        }
     }
-}
-
-// MARK: - Setup Step
-
-enum VerificationStatus { case granted, missing }
-
-struct SetupStep: View {
-    let number: Int
-    let title: String
-    let description: String
-    let action: String?
-    let actionURL: String?
-    var verification: VerificationStatus?
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 16) {
-            // Number badge — turns into a checkmark when verification passes
-            ZStack {
-                Circle()
-                    .fill(badgeColor.opacity(0.85))
-                    .frame(width: 26, height: 26)
-                if verification == .granted {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.white)
-                } else {
-                    Text("\(number)")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.white)
-                }
-            }
-            .padding(.top, 2)
-            .animation(.easeInOut(duration: 0.3), value: verification == .granted)
-
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 8) {
-                    Text(title)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.white)
-
-                    // Inline status badge
-                    if let v = verification {
-                        HStack(spacing: 4) {
-                            Image(systemName: v == .granted ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                                .font(.system(size: 10))
-                            Text(v == .granted ? "Granted" : "Not granted")
-                                .font(.system(size: 10, weight: .semibold))
-                        }
-                        .foregroundColor(v == .granted ? .green : Color(red: 1.0, green: 0.75, blue: 0.15))
-                        .padding(.horizontal, 7).padding(.vertical, 3)
-                        .background(
-                            Capsule().fill(v == .granted
-                                ? Color.green.opacity(0.15)
-                                : Color(red: 1.0, green: 0.75, blue: 0.15).opacity(0.15))
-                        )
-                        .animation(.easeInOut(duration: 0.3), value: v == .granted)
+    
+    // MARK: - Setup Step
+    
+    enum VerificationStatus { case granted, missing }
+    
+    struct SetupStep: View {
+        let number: Int
+        let title: String
+        let description: String
+        let action: String?
+        let actionURL: String?
+        var verification: VerificationStatus?
+        
+        var body: some View {
+            HStack(alignment: .top, spacing: 16) {
+                // Number badge — turns into a checkmark when verification passes
+                ZStack {
+                    Circle()
+                        .fill(badgeColor.opacity(0.85))
+                        .frame(width: 26, height: 26)
+                    if verification == .granted {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.white)
+                    } else {
+                        Text("\(number)")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.white)
                     }
                 }
-
-                Text(description)
-                    .font(.system(size: 12))
-                    .foregroundColor(Color.white.opacity(0.5))
-                    .fixedSize(horizontal: false, vertical: true)
-
-                if let action = action, let urlString = actionURL, let url = URL(string: urlString) {
-                    Button(action) { NSWorkspace.shared.open(url) }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(Color(red: 0.94, green: 0.33, blue: 0.31))
-                        .padding(.top, 2)
+                .padding(.top, 2)
+                .animation(.easeInOut(duration: 0.3), value: verification == .granted)
+                
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 8) {
+                        Text(title)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.white)
+                        
+                        // Inline status badge
+                        if let v = verification {
+                            HStack(spacing: 4) {
+                                Image(systemName: v == .granted ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                                    .font(.system(size: 10))
+                                Text(v == .granted ? "Granted" : "Not granted")
+                                    .font(.system(size: 10, weight: .semibold))
+                            }
+                            .foregroundColor(v == .granted ? .green : Color(red: 1.0, green: 0.75, blue: 0.15))
+                            .padding(.horizontal, 7).padding(.vertical, 3)
+                            .background(
+                                Capsule().fill(v == .granted
+                                               ? Color.green.opacity(0.15)
+                                               : Color(red: 1.0, green: 0.75, blue: 0.15).opacity(0.15))
+                            )
+                            .animation(.easeInOut(duration: 0.3), value: v == .granted)
+                        }
+                    }
+                    
+                    Text(description)
+                        .font(.system(size: 12))
+                        .foregroundColor(Color.white.opacity(0.5))
+                        .fixedSize(horizontal: false, vertical: true)
+                    
+                    if let action = action, let urlString = actionURL, let url = URL(string: urlString) {
+                        Button(action) { NSWorkspace.shared.open(url) }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(Color(red: 0.94, green: 0.33, blue: 0.31))
+                            .padding(.top, 2)
+                    }
                 }
+                Spacer()
             }
-            Spacer()
+            .padding(.vertical, 14)
+            .overlay(Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1), alignment: .bottom)
         }
-        .padding(.vertical, 14)
-        .overlay(Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1), alignment: .bottom)
+        
+        private var badgeColor: Color {
+            if verification == .granted { return .green }
+            return Color(red: 0.94, green: 0.33, blue: 0.31)
+        }
     }
-
-    private var badgeColor: Color {
-        if verification == .granted { return .green }
-        return Color(red: 0.94, green: 0.33, blue: 0.31)
-    }
-}
-
-
-// MARK: - Donate Button
-
-struct DonateButton: View {
-    let label: String; let icon: String; let url: String; let color: Color
-    @State private var hovered = false
-
-    var body: some View {
-        Button(action: { if let u = URL(string: url) { NSWorkspace.shared.open(u) } }) {
-            HStack(spacing: 6) {
-                Text(icon).font(.system(size: 13))
-                Text(label).font(.system(size: 12, weight: .semibold))
+    
+    
+    // MARK: - Donate Button
+    
+    struct DonateButton: View {
+        let label: String; let icon: String; let url: String; let color: Color
+        @State private var hovered = false
+        
+        var body: some View {
+            Button(action: { if let u = URL(string: url) { NSWorkspace.shared.open(u) } }) {
+                HStack(spacing: 6) {
+                    Text(icon).font(.system(size: 13))
+                    Text(label).font(.system(size: 12, weight: .semibold))
+                }
+                .foregroundColor(hovered ? .white : color)
+                .frame(maxWidth: .infinity).padding(.vertical, 9)
+                .background(RoundedRectangle(cornerRadius: 7)
+                    .fill(hovered ? color.opacity(0.3) : color.opacity(0.12)))
+                .overlay(RoundedRectangle(cornerRadius: 7).stroke(color.opacity(0.4), lineWidth: 1))
             }
-            .foregroundColor(hovered ? .white : color)
-            .frame(maxWidth: .infinity).padding(.vertical, 9)
-            .background(RoundedRectangle(cornerRadius: 7)
-                .fill(hovered ? color.opacity(0.3) : color.opacity(0.12)))
-            .overlay(RoundedRectangle(cornerRadius: 7).stroke(color.opacity(0.4), lineWidth: 1))
+            .buttonStyle(.plain).onHover { hovered = $0 }
         }
-        .buttonStyle(.plain).onHover { hovered = $0 }
     }
 }
