@@ -185,6 +185,11 @@ class DriveMonitor: ObservableObject {
             return
         }
 
+        if isTimeMachineVolume(path) {
+            LogStore.shared.log("Skipped (Time Machine volume): \(path)")
+            return
+        }
+
         let resolvedPath: String
         if path.hasPrefix("/Volumes/") {
             let candidate = "/System/Volumes/Data" + path
@@ -200,6 +205,50 @@ class DriveMonitor: ObservableObject {
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 4.0) { [weak self] in
             self?.handleVolume(resolvedPath: resolvedPath, volumesPath: path, name: name)
         }
+    }
+
+    // MARK: - Time Machine Detection
+
+    /// Returns true if the volume at the given path is a Time Machine backup destination.
+    /// Covers APFS (.timemachine hidden mount), HFS+ (Backups.backupdb), and
+    /// any volume registered as a TM destination in tmutil.
+    private func isTimeMachineVolume(_ volumePath: String) -> Bool {
+        // 1. APFS TM volumes mount under /Volumes/.timemachine/
+        if volumePath.contains("/.timemachine") {
+            return true
+        }
+
+        // 2. HFS+ TM volumes have a Backups.backupdb folder at root
+        let backupDB = (volumePath as NSString).appendingPathComponent("Backups.backupdb")
+        if FileManager.default.fileExists(atPath: backupDB) {
+            return true
+        }
+
+        // 3. Cross-reference against tmutil's registered TM destinations
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/tmutil")
+        process.arguments = ["destinationinfo", "-X"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe() // suppress stderr
+        do {
+            try process.run()
+            process.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            if let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+               let destinations = plist["Destinations"] as? [[String: Any]] {
+                for dest in destinations {
+                    if let mountPoint = dest["MountPoint"] as? String,
+                       mountPoint == volumePath {
+                        return true
+                    }
+                }
+            }
+        } catch {
+            // tmutil unavailable or failed — fall through
+        }
+
+        return false
     }
 
     private func isExternalVolume(_ url: URL) -> Bool {
@@ -883,7 +932,7 @@ struct WelcomeView: View {
                 Divider().background(Color.white.opacity(0.08))
 
                 VStack(spacing: 12) {
-                    Text("Spotlight Off is free and open source. If it saves you time, consider supporting development.")
+                    Text("Free, open source, and CC BY-NC 4.0 licensed. Made by Faini Made. If it saves you time, consider supporting development.")
                         .font(.system(size: 11)).foregroundColor(Color.white.opacity(0.4))
                         .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 8) {

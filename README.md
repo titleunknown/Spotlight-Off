@@ -7,7 +7,8 @@
 
   ![macOS](https://img.shields.io/badge/macOS-14.0%2B-blue?style=flat-square&logo=apple)
   ![Swift](https://img.shields.io/badge/Swift-5.9-orange?style=flat-square&logo=swift)
-  ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
+  ![License](https://img.shields.io/badge/license-CC%20BY--NC%204.0-green?style=flat-square)
+  ![Notarized](https://img.shields.io/badge/Apple%20Notarized-%E2%9C%93-brightgreen?style=flat-square&logo=apple)
 
 </div>
 
@@ -41,13 +42,6 @@ Works with **APFS, HFS+, and exFAT** volumes.
 3. Launch it — the icon will appear in your menu bar
 4. A **setup guide** will appear on first launch to walk you through the one required permission
 5. Optionally enable **Launch at Login** in the settings window
-
-### ⚠️ Gatekeeper warning
-This app is not notarized (Apple Developer Program enrollment required for notarization). On first launch you will see a warning saying the app can't be verified. To open it:
-1. Right-click **Spotlight Off.app** and choose **Open**
-2. Click **Open** in the dialog that appears
-
-You only need to do this once.
 
 ---
 
@@ -129,4 +123,4 @@ Spotlight Off is free and open source. If it saves you time, consider buying me 
 
 ## License
 
-FolderMeter is licensed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). Free for personal and non-commercial use. For commercial licensing contact [fainimade.com](https://www.fainimade.com).
+Spotlight Off is licensed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). Free for personal and non-commercial use. For commercial licensing contact [fainimade.com](https://www.fainimade.com).
