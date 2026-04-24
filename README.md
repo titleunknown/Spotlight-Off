@@ -34,6 +34,8 @@ Works with **APFS, HFS+, and exFAT** volumes. Disk images (.dmg files) and Time 
 
 ![Spotlight Off Screenshot](Screenshot%20Spotlight%20Off.jpg)
 
+![Spotlight Off Screenshot](Screenshot%20Spotlight%20Off-2.jpg)
+
 ---
 
 ## Installation
