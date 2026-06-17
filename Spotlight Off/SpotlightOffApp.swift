@@ -197,8 +197,18 @@ class DriveMonitor: ObservableObject {
     }
 
     @objc private func volumeMounted(_ notification: NSNotification) {
+        // This handler fires on the main thread. Volume classification spawns
+        // helper processes (hdiutil, tmutil) and waits on them, so do all of
+        // that work off the main thread to keep the UI/menu responsive.
         guard let path = notification.userInfo?["NSDevicePath"] as? String else { return }
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            self?.classifyAndProcess(path: path)
+        }
+    }
 
+    /// Classifies a freshly mounted volume and, if eligible, disables indexing.
+    /// Must be called off the main thread — it runs blocking subprocesses.
+    private func classifyAndProcess(path: String) {
         // Ignore disk images (.dmg mounts appear under /Volumes/ but their
         // backing path ends with .dmg, or the volume URL reports a disk-image type).
         if isDiskImage(path) {

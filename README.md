@@ -84,7 +84,7 @@ When a volume mounts, Spotlight Off:
 4. If enabled, runs `mdutil -i off` directly — no shell, no escalation
 5. Records the result in the persistent history log
 
-Full Disk Access grants `mdutil` the permissions it needs to disable indexing without requiring root. All history is stored locally in `UserDefaults`. No network requests are ever made.
+Full Disk Access grants `mdutil` the permissions it needs to disable indexing without requiring root. All history is stored locally in `UserDefaults`. The only network request the app ever makes is an optional, user-initiated check for updates against the GitHub Releases API — nothing is sent or collected automatically.
 
 ---
 
