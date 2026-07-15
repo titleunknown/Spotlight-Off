@@ -69,7 +69,7 @@ Open **System Settings → Privacy & Security → Full Disk Access** and make su
 | See recently processed drives | Click the menu bar icon |
 | Open full history & settings | Click **History & Settings…** or press ⌘, |
 | Reopen the setup guide | Click **Setup Guide…** in the menu |
-| Remove a history entry | Select it in the list and press Delete |
+| Remove a history entry | Hover over it in the list and click the ✕ button |
 | Clear all history | Click **Clear All** in the Settings & History tab |
 | Enable launch at login | Toggle in the Settings & History tab |
 | View activity log | Click the **Activity Log** tab in the settings window |
