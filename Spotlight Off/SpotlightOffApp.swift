@@ -138,46 +138,40 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func openSettings() {
-        if let window = settingsWindow, window.isVisible {
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate()
-            return
+        if settingsWindow == nil {
+            let view = NSHostingView(rootView: SettingsView(monitor: driveMonitor))
+            view.frame = NSRect(x: 0, y: 0, width: 500, height: 580)
+            let window = NSWindow(contentRect: view.frame,
+                                  styleMask: [.titled, .closable, .miniaturizable],
+                                  backing: .buffered, defer: false)
+            window.title = "Spotlight Off"
+            window.contentView = view
+            window.center()
+            window.isReleasedWhenClosed = false
+            settingsWindow = window
         }
-        let view = NSHostingView(rootView: SettingsView(monitor: driveMonitor))
-        view.frame = NSRect(x: 0, y: 0, width: 500, height: 580)
-        let window = NSWindow(contentRect: view.frame,
-                              styleMask: [.titled, .closable, .miniaturizable],
-                              backing: .buffered, defer: false)
-        window.title = "Spotlight Off"
-        window.contentView = view
-        window.center()
-        window.isReleasedWhenClosed = false
-        window.makeKeyAndOrderFront(nil)
+        settingsWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate()
-        settingsWindow = window
     }
 
     @objc func showWelcome() {
-        if let window = welcomeWindow, window.isVisible {
-            window.makeKeyAndOrderFront(nil)
-            NSApp.activate()
-            return
+        if welcomeWindow == nil {
+            let view = NSHostingView(rootView: WelcomeView { [weak self] in
+                self?.welcomeWindow?.close()
+                UserDefaults.standard.set(true, forKey: "hasSeenWelcome")
+            })
+            view.frame = NSRect(x: 0, y: 0, width: 500, height: 680)
+            let window = NSWindow(contentRect: view.frame,
+                                  styleMask: [.titled, .closable],
+                                  backing: .buffered, defer: false)
+            window.title = "Welcome to Spotlight Off"
+            window.contentView = view
+            window.center()
+            window.isReleasedWhenClosed = false
+            welcomeWindow = window
         }
-        let view = NSHostingView(rootView: WelcomeView {
-            self.welcomeWindow?.close()
-            UserDefaults.standard.set(true, forKey: "hasSeenWelcome")
-        })
-        view.frame = NSRect(x: 0, y: 0, width: 500, height: 680)
-        let window = NSWindow(contentRect: view.frame,
-                              styleMask: [.titled, .closable],
-                              backing: .buffered, defer: false)
-        window.title = "Welcome to Spotlight Off"
-        window.contentView = view
-        window.center()
-        window.isReleasedWhenClosed = false
-        window.makeKeyAndOrderFront(nil)
+        welcomeWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate()
-        welcomeWindow = window
     }
 }
 
@@ -229,32 +223,21 @@ class DriveMonitor: ObservableObject {
             return
         }
 
-        let resolvedPath: String
-        if path.hasPrefix("/Volumes/") {
-            let candidate = "/System/Volumes/Data" + path
-            resolvedPath = FileManager.default.fileExists(atPath: candidate) ? candidate : path
-        } else {
-            resolvedPath = path
-        }
-
         let name = url.lastPathComponent.isEmpty ? "External Drive" : url.lastPathComponent
         LogStore.shared.log("Accepted \"\(name)\" — disabling indexing in 4s…", kind: .info)
 
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 4.0) { [weak self] in
-            self?.handleVolume(resolvedPath: resolvedPath, volumesPath: path, name: name)
+            self?.handleVolume(path: path, name: name)
         }
     }
 
     // MARK: - Disk Image Detection
 
     private func isDiskImage(_ volumePath: String) -> Bool {
-        // Ask DiskArbitration / hdiutil whether the backing device is an image.
-        // Fastest heuristic: check if the BSD device name for this mount resolves
-        // to a disk image via `hdiutil info -plist`. Falls back to checking if the
-        // volume resource values report it as not-local (network) or if the path
-        // is under a known image mount pattern.
+        // Asks `hdiutil info -plist` for all attached disk images and checks
+        // whether any of them is mounted at this volume's path.
         let url = URL(fileURLWithPath: volumePath)
-        if let vals = try? url.resourceValues(forKeys: [.volumeIsLocalKey, .volumeIsRemovableKey, .volumeIsEjectableKey]),
+        if let vals = try? url.resourceValues(forKeys: [.volumeIsLocalKey]),
            vals.volumeIsLocal == false {
             // Network / automount — not a DMG but also not our concern.
             return false
@@ -320,21 +303,24 @@ class DriveMonitor: ObservableObject {
 
     private func isExternalVolume(_ url: URL) -> Bool {
         guard let vals = try? url.resourceValues(forKeys: [
-            .volumeIsRootFileSystemKey, .volumeIsInternalKey,
-            .volumeIsLocalKey, .volumeIsRemovableKey
+            .volumeIsRootFileSystemKey, .volumeIsInternalKey, .volumeIsLocalKey
         ]) else {
             LogStore.shared.log("Could not read volume flags for \(url.path)", kind: .failure)
             return false
         }
-        let isRoot      = vals.volumeIsRootFileSystem ?? false
-        let isInternal  = vals.volumeIsInternal       ?? false
-        let isLocal     = vals.volumeIsLocal           ?? false
-        if isRoot || isInternal || !isLocal { return false }
-        return true
+        let isRoot     = vals.volumeIsRootFileSystem ?? false
+        let isInternal = vals.volumeIsInternal       ?? false
+        let isLocal    = vals.volumeIsLocal          ?? false
+        return !isRoot && !isInternal && isLocal
     }
 
-    private func handleVolume(resolvedPath: String, volumesPath: String, name: String) {
-        guard let status = mdutilStatus(path: resolvedPath) else {
+    private func handleVolume(path: String, name: String) {
+        // The drive may have been ejected during the 4-second settle delay.
+        guard FileManager.default.fileExists(atPath: path) else {
+            LogStore.shared.log("\"\(name)\" — volume no longer mounted, skipped", kind: .info)
+            return
+        }
+        guard let status = mdutilStatus(path: path) else {
             LogStore.shared.log("\"\(name)\" — could not read mdutil status, skipped", kind: .failure)
             return
         }
@@ -348,11 +334,11 @@ class DriveMonitor: ObservableObject {
             return
         }
         LogStore.shared.log("\"\(name)\" — disabling Spotlight…", kind: .info)
-        let (ok, detail) = runMdutil(path: volumesPath)
+        let (ok, detail) = runMdutil(path: path)
         if ok {
             LogStore.shared.log("\"\(name)\" — Spotlight disabled ✓", kind: .success)
             DispatchQueue.main.async { [weak self] in
-                self?.addToHistory(name: name, path: volumesPath)
+                self?.addToHistory(name: name, path: path)
             }
             ToastManager.shared.show(.disabled(name))
         } else {
@@ -395,8 +381,10 @@ class DriveMonitor: ObservableObject {
             let out = String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
             let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
             let combined = (out + err).trimmingCharacters(in: .whitespacesAndNewlines)
-            let lower = combined.lowercased()
-            let succeeded = p.terminationStatus == 0 && !lower.contains("error") && !lower.contains("could not")
+            // mdutil can exit 0 while still reporting a failure, so also scan for its
+            // "Error:" prefix — but only that exact marker, since the volume path is
+            // echoed in the output and could itself contain the word "error".
+            let succeeded = p.terminationStatus == 0 && !combined.lowercased().contains("error:")
             return (succeeded, succeeded ? "" : (combined.isEmpty ? "exit \(p.terminationStatus)" : combined))
         } catch {
             return (false, error.localizedDescription)
@@ -411,7 +399,7 @@ class DriveMonitor: ObservableObject {
         onHistoryChanged?()
     }
 
-    func removeEntries(at offsets: IndexSet) { history.remove(atOffsets: offsets); saveHistory(); onHistoryChanged?() }
+    func removeEntry(_ entry: DriveEntry) { history.removeAll { $0.id == entry.id }; saveHistory(); onHistoryChanged?() }
     func clearHistory() { history.removeAll(); saveHistory(); onHistoryChanged?() }
 
     private func saveHistory() {
@@ -564,6 +552,16 @@ class UpdateChecker: ObservableObject {
         return false
     }
 
+    private struct Release: Decodable {
+        let tagName: String
+        let htmlURL: String
+
+        enum CodingKeys: String, CodingKey {
+            case tagName = "tag_name"
+            case htmlURL = "html_url"
+        }
+    }
+
     private let currentVersion: String = {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
     }()
@@ -574,17 +572,20 @@ class UpdateChecker: ObservableObject {
         var request = URLRequest(url: url)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
 
-        URLSession.shared.dataTask(with: request) { [weak self] data, _, error in
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             DispatchQueue.main.async {
                 guard let self else { return }
                 if let error { self.state = .error(error.localizedDescription); return }
+                if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+                    self.state = .error("GitHub returned HTTP \(http.statusCode).")
+                    return
+                }
                 guard let data,
-                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                      let tag = json["tag_name"] as? String,
-                      let htmlURL = json["html_url"] as? String,
-                      let releaseURL = URL(string: htmlURL)
+                      let release = try? JSONDecoder().decode(Release.self, from: data),
+                      let releaseURL = URL(string: release.htmlURL)
                 else { self.state = .error("Could not parse release info."); return }
 
+                let tag = release.tagName
                 let latest = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
                 self.state = self.isNewer(latest, than: self.currentVersion)
                     ? .updateAvailable(tag, releaseURL)
@@ -714,7 +715,7 @@ struct OverviewTab: View {
     @State private var notificationsEnabled: Bool =
         (UserDefaults.standard.object(forKey: "notificationsEnabled") as? Bool) ?? true
 
-    private let dateFormatter: DateFormatter = {
+    private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateStyle = .medium; f.timeStyle = .short
         return f
@@ -731,14 +732,20 @@ struct OverviewTab: View {
                     SettingsRow(icon: "arrow.up.circle", iconColor: .blue) {
                         Toggle("Launch at login", isOn: $launchAtLogin)
                             .onChange(of: launchAtLogin) { _, enabled in
+                                // Skip when the toggle already matches reality — this fires
+                                // again when we revert the value below, and acting on that
+                                // echo would unregister what the user just registered.
+                                guard enabled != (SMAppService.mainApp.status == .enabled) else { return }
                                 do {
                                     if enabled { try SMAppService.mainApp.register() }
                                     else       { try SMAppService.mainApp.unregister() }
-                                    launchAtLogin = SMAppService.mainApp.status == .enabled
                                 } catch {
                                     LogStore.shared.log("Launch at login error: \(error.localizedDescription)", kind: .failure)
-                                    launchAtLogin = SMAppService.mainApp.status == .enabled
                                 }
+                                if enabled && SMAppService.mainApp.status == .requiresApproval {
+                                    LogStore.shared.log("Launch at login needs approval in System Settings → General → Login Items", kind: .failure)
+                                }
+                                launchAtLogin = SMAppService.mainApp.status == .enabled
                             }
                     }
 
@@ -811,22 +818,12 @@ struct OverviewTab: View {
                     VStack(spacing: 0) {
                         ForEach(Array(monitor.history.enumerated()), id: \.element.id) { index, entry in
                             if index > 0 { Divider().padding(.leading, 44) }
-                            HStack(spacing: 12) {
-                                ZStack {
-                                    Circle().fill(Color.green.opacity(0.12)).frame(width: 28, height: 28)
-                                    Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
-                                        .font(.system(size: 14))
+                            HistoryRow(entry: entry,
+                                       dateText: Self.dateFormatter.string(from: entry.date)) {
+                                withAnimation(.easeInOut(duration: 0.15)) {
+                                    monitor.removeEntry(entry)
                                 }
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(entry.name).fontWeight(.medium).font(.system(size: 13))
-                                    Text(entry.path).font(.caption).foregroundColor(.secondary)
-                                        .lineLimit(1).truncationMode(.middle)
-                                }
-                                Spacer()
-                                Text(dateFormatter.string(from: entry.date))
-                                    .font(.caption2).foregroundColor(.secondary)
                             }
-                            .padding(.horizontal, 14).padding(.vertical, 8)
                         }
                     }
                     .background(Color(NSColor.controlBackgroundColor))
@@ -835,7 +832,7 @@ struct OverviewTab: View {
                         .stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
                     .padding(.horizontal, 20)
 
-                    Text("Swipe left on an entry to remove it, or use Clear All.")
+                    Text("Hover over an entry to remove it, or use Clear All.")
                         .font(.caption2).foregroundColor(.secondary.opacity(0.5))
                         .padding(.horizontal, 20).padding(.top, 4)
                 }
@@ -844,6 +841,46 @@ struct OverviewTab: View {
             }
             .padding(.top, 8)
         }
+    }
+}
+
+// MARK: - History Row
+
+struct HistoryRow: View {
+    let entry: DriveEntry
+    let dateText: String
+    let onDelete: () -> Void
+    @State private var hovered = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle().fill(Color.green.opacity(0.12)).frame(width: 28, height: 28)
+                Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+                    .font(.system(size: 14))
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.name).fontWeight(.medium).font(.system(size: 13))
+                Text(entry.path).font(.caption).foregroundColor(.secondary)
+                    .lineLimit(1).truncationMode(.middle)
+            }
+            Spacer()
+            if hovered {
+                Button(action: onDelete) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Remove from history")
+            } else {
+                Text(dateText)
+                    .font(.caption2).foregroundColor(.secondary)
+            }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 8)
+        .contentShape(Rectangle())
+        .onHover { hovered = $0 }
     }
 }
 
