@@ -1196,9 +1196,27 @@ class FDAChecker: ObservableObject {
     @Published var hasAccess: Bool = false
     init() { check() }
     func check() {
-        let probe = "/Library/Application Support/com.apple.TCC"
-        let granted = (try? FileManager.default.contentsOfDirectory(atPath: probe)) != nil
+        let granted = Self.probe()
         DispatchQueue.main.async { self.hasAccess = granted }
+    }
+
+    /// There's no public API for checking Full Disk Access, so apps have long
+    /// probed a location that's unreadable without it. macOS 27 moved the TCC
+    /// database into a protected container, breaking the classic probe of
+    /// "/Library/Application Support/com.apple.TCC". ~/Library/Safari exists
+    /// on every Mac regardless of Safari usage and has required Full Disk
+    /// Access to read since it was introduced, so it works across every
+    /// supported OS version — the old TCC path stays as a fallback in case a
+    /// future OS removes Safari's folder too.
+    private static func probe() -> Bool {
+        let candidates = [
+            "\(NSHomeDirectory())/Library/Safari",
+            "/Library/Application Support/com.apple.TCC"
+        ]
+        guard let path = candidates.first(where: { FileManager.default.fileExists(atPath: $0) }) else {
+            return false
+        }
+        return (try? FileManager.default.contentsOfDirectory(atPath: path)) != nil
     }
 }
 
