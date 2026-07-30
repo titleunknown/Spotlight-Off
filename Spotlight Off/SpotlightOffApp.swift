@@ -1046,6 +1046,46 @@ struct HistoryRow: View {
     }
 }
 
+// MARK: - History Row
+
+struct HistoryRow: View {
+    let entry: DriveEntry
+    let dateText: String
+    let onDelete: () -> Void
+    @State private var hovered = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle().fill(Color.green.opacity(0.12)).frame(width: 28, height: 28)
+                Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+                    .font(.system(size: 14))
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.name).fontWeight(.medium).font(.system(size: 13))
+                Text(entry.path).font(.caption).foregroundColor(.secondary)
+                    .lineLimit(1).truncationMode(.middle)
+            }
+            Spacer()
+            if hovered {
+                Button(action: onDelete) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Remove from history")
+            } else {
+                Text(dateText)
+                    .font(.caption2).foregroundColor(.secondary)
+            }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 8)
+        .contentShape(Rectangle())
+        .onHover { hovered = $0 }
+    }
+}
+
 // MARK: - Section Header
 
 struct SectionHeader: View {
