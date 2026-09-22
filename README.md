@@ -26,7 +26,7 @@ Every time you plug in an external drive, macOS quietly starts building a Spotli
 - 🚀 **Launches at login** so it's always running in the background
 - 👋 **First-launch setup guide** walks you through the one required permission
 
-Works with **APFS, HFS+, and exFAT** volumes. Disk images (.dmg files) and Time Machine volumes are automatically ignored.
+Works with **APFS, HFS+, and exFAT** volumes — external drives, USB card readers, and SD cards in the MacBook's built-in SD card slot. Disk images (.dmg files) and Time Machine volumes are automatically ignored.
 
 ---
 
@@ -82,8 +82,8 @@ Open **System Settings → Privacy & Security → Full Disk Access** and make su
 
 When a volume mounts, Spotlight Off:
 
-1. Ignores disk images, Time Machine volumes, and internal or virtual volumes
-2. Reads the volume's metadata flags to confirm it's a local, non-root, non-internal volume
+1. Ignores disk images, Time Machine volumes, and internal (non-removable) or virtual volumes
+2. Reads the volume's metadata flags to confirm it's a local, non-root volume that's either external or removable (the built-in SD card reader reports cards as internal but removable)
 3. Waits 4 seconds for the volume to fully initialise
 4. Runs `mdutil -s` to check whether indexing is currently enabled
 5. If enabled, runs `mdutil -i off` directly — no shell, no escalation

@@ -210,26 +210,21 @@ class DriveMonitor: ObservableObject {
         DispatchQueue.main.async { self.isScanningVolumes = true }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
-            let keys: [URLResourceKey] = [
-                .volumeNameKey, .volumeIsLocalKey, .volumeIsBrowsableKey,
-                .volumeIsRootFileSystemKey, .volumeIsInternalKey
-            ]
+            let keys: [URLResourceKey] = [.volumeNameKey, .volumeIsBrowsableKey]
+                + DriveMonitor.eligibilityKeys
             let urls = FileManager.default.mountedVolumeURLs(
                 includingResourceValuesForKeys: keys, options: [.skipHiddenVolumes]) ?? []
 
             var result: [MountedVolume] = []
             for url in urls {
                 let vals = try? url.resourceValues(forKeys: Set(keys))
-                let isLocal     = vals?.volumeIsLocal          ?? false
-                let isBrowsable = vals?.volumeIsBrowsable      ?? true
-                let isRoot      = vals?.volumeIsRootFileSystem ?? false
-                let isInternal  = vals?.volumeIsInternal       ?? false
+                let isBrowsable = vals?.volumeIsBrowsable ?? true
                 // Exclude the boot/internal volume (Macintosh HD) — only offer
                 // re-enable for external drives, matching what the app processes.
-                guard isLocal, isBrowsable, !isRoot, !isInternal else { continue }
+                guard let vals, isBrowsable, DriveMonitor.isEligible(vals) else { continue }
                 guard let status = self.mdutilStatus(path: url.path),
                       status.contains("disabled") else { continue }
-                let volName = vals?.volumeName ?? ""
+                let volName = vals.volumeName ?? ""
                 let name = volName.isEmpty ? url.lastPathComponent : volName
                 result.append(MountedVolume(name: name, path: url.path))
             }
@@ -379,16 +374,29 @@ class DriveMonitor: ObservableObject {
     }
 
     private func isExternalVolume(_ url: URL) -> Bool {
-        guard let vals = try? url.resourceValues(forKeys: [
-            .volumeIsRootFileSystemKey, .volumeIsInternalKey, .volumeIsLocalKey
-        ]) else {
+        guard let vals = try? url.resourceValues(forKeys: Set(Self.eligibilityKeys)) else {
             LogStore.shared.log("Could not read volume flags for \(url.path)", kind: .failure)
             return false
         }
-        let isRoot     = vals.volumeIsRootFileSystem ?? false
-        let isInternal = vals.volumeIsInternal       ?? false
-        let isLocal    = vals.volumeIsLocal          ?? false
-        return !isRoot && !isInternal && isLocal
+        return Self.isEligible(vals)
+    }
+
+    static let eligibilityKeys: [URLResourceKey] = [
+        .volumeIsRootFileSystemKey, .volumeIsInternalKey, .volumeIsLocalKey,
+        .volumeIsRemovableKey, .volumeIsEjectableKey
+    ]
+
+    /// A volume is eligible if it's local, not the boot volume, and either on an
+    /// external bus or removable media. The removable check matters for the
+    /// MacBook's built-in SD card reader: it sits on an internal bus, so cards in
+    /// it report `volumeIsInternal == true` even though they're removable.
+    static func isEligible(_ vals: URLResourceValues) -> Bool {
+        let isRoot      = vals.volumeIsRootFileSystem ?? false
+        let isInternal  = vals.volumeIsInternal       ?? false
+        let isLocal     = vals.volumeIsLocal          ?? false
+        let isRemovable = vals.volumeIsRemovable      ?? false
+        let isEjectable = vals.volumeIsEjectable      ?? false
+        return isLocal && !isRoot && (!isInternal || isRemovable || isEjectable)
     }
 
     private func handleVolume(path: String, name: String) {
