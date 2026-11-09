@@ -30,7 +30,7 @@ final class DriveMonitor: ObservableObject {
         observers.append(center.addObserver(forName: NSWorkspace.didMountNotification,
                                             object: nil, queue: .main) { [weak self] note in
             guard let path = note.userInfo?["NSDevicePath"] as? String else { return }
-            MainActor.assumeIsolated { self?.process(path: path, atLaunch: false) }
+            MainActor.assumeIsolated { self?.process(path: path, trigger: .mount) }
         })
         observers.append(center.addObserver(forName: NSWorkspace.didUnmountNotification,
                                             object: nil, queue: .main) { [weak self] _ in
@@ -41,22 +41,30 @@ final class DriveMonitor: ObservableObject {
         // never produce a mount notification, so sweep them once now.
         Task {
             let paths = await runInBackground { VolumeInspector.mountedVolumePaths() }
-            for path in paths { process(path: path, atLaunch: true) }
+            for path in paths { process(path: path, trigger: .launchSweep) }
         }
         refreshVolumes()
     }
 
     // MARK: - Mount Handling
 
-    private func process(path: String, atLaunch: Bool) {
-        if !atLaunch { log("Mounted: \(path)") }
+    /// Why a volume is being looked at. A real mount is chatty (logs every
+    /// skip, waits 4s, announces "already off"); the launch sweep over drives
+    /// that were already attached stays quiet.
+    private enum MountTrigger { case mount, launchSweep }
+
+    /// Flow: classify → (eligible only) allowed-list check → optional 4s
+    /// delay → `disable`, which may also remove the old index.
+    private func process(path: String, trigger: MountTrigger) {
+        let isMount = trigger == .mount
+        if isMount { log("Mounted: \(path)") }
         Task {
             let classification = await runInBackground { VolumeInspector.classify(path: path) }
             switch classification {
             case .notExternal:
-                if !atLaunch { log("Skipped — internal or virtual volume: \(path)") }
+                if isMount { log("Skipped — internal or virtual volume: \(path)") }
             case .diskImage:
-                if !atLaunch { log("Ignored — disk image: \(path)") }
+                if isMount { log("Ignored — disk image: \(path)") }
             case .timeMachine:
                 log("Skipped — Time Machine volume: \(path)")
             case .eligible(let name, let uuid):
@@ -65,19 +73,27 @@ final class DriveMonitor: ObservableObject {
                     log("Skipped — you re-enabled indexing on \"\(name)\"")
                     return
                 }
-                log(atLaunch ? "Found \"\(name)\" already connected — checking indexing…"
-                             : "Accepted \"\(name)\" — disabling indexing in 4s…")
-                if !atLaunch { try? await Task.sleep(for: .seconds(4)) }
-                await disable(path: path, name: name, announceAlreadyOff: !atLaunch)
+                log(isMount ? "Accepted \"\(name)\" — disabling indexing in 4s…"
+                            : "Found \"\(name)\" already connected — checking indexing…")
+                if isMount { try? await Task.sleep(for: .seconds(4)) }
+                await disable(path: path, name: name, announceAlreadyOff: isMount)
             }
         }
     }
 
+    /// Marks `path` busy while `body` runs, always clearing it afterwards.
+    /// Returns nil without running `body` if the path is already busy.
+    private func withBusy<T>(_ path: String, _ body: () async -> T) async -> T? {
+        guard busyPaths.insert(path).inserted else { return nil }
+        defer { busyPaths.remove(path) }
+        return await body()
+    }
+
     /// Turns indexing off (if needed), records the result and notifies.
     private func disable(path: String, name: String, announceAlreadyOff: Bool) async {
-        guard busyPaths.insert(path).inserted else { return }
-        let outcome = await runInBackground { VolumeInspector.disableIfNeeded(path: path) }
-        busyPaths.remove(path)
+        guard let outcome = await withBusy(path, {
+            await runInBackground { VolumeInspector.disableIfNeeded(path: path) }
+        }) else { return }
 
         switch outcome {
         case .gone:
@@ -171,6 +187,12 @@ final class DriveMonitor: ObservableObject {
 
     /// Turns indexing off for a connected drive right away, and stops allowing it.
     func disableIndexing(_ volume: MountedVolume) {
+        // Check before touching the allowed list: `disable` silently skips a
+        // busy drive, which would leave it un-allowed but still indexed.
+        guard !busyPaths.contains(volume.path) else {
+            log("\"\(volume.name)\" — busy with another action, try again in a moment")
+            return
+        }
         if let uuid = volume.uuid, isAllowed(uuid) {
             saveAllowed(allowedVolumes.filter { $0.uuid != uuid })
         }
@@ -180,11 +202,14 @@ final class DriveMonitor: ObservableObject {
     /// Stops allowing indexing on a drive. If it's connected right now, it's
     /// processed immediately; otherwise it'll be handled on its next mount.
     func forgetAllowed(_ allowed: AllowedVolume) {
+        let connected = connectedDrives.first(where: { $0.uuid == allowed.uuid })
+        if let connected, busyPaths.contains(connected.path) {
+            log("\"\(allowed.name)\" — busy with another action, try again in a moment")
+            return
+        }
         saveAllowed(allowedVolumes.filter { $0.uuid != allowed.uuid })
         log("\"\(allowed.name)\" — no longer allowed to index")
-        if let volume = connectedDrives.first(where: { $0.uuid == allowed.uuid }) {
-            disableIndexing(volume)
-        }
+        if let connected { disableIndexing(connected) }
     }
 
     // MARK: - Cleanup
@@ -194,10 +219,10 @@ final class DriveMonitor: ObservableObject {
     }
 
     private func removeIndex(path: String, name: String, announce: Bool) async {
-        guard busyPaths.insert(path).inserted else { return }
-        log("\"\(name)\" — removing old Spotlight index…")
-        let result = await runInBackground { VolumeInspector.removeSpotlightIndex(volumePath: path) }
-        busyPaths.remove(path)
+        guard let result = await withBusy(path, {
+            log("\"\(name)\" — removing old Spotlight index…")
+            return await runInBackground { VolumeInspector.removeSpotlightIndex(volumePath: path) }
+        }) else { return }
 
         switch result {
         case .success(0):

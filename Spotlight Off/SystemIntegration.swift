@@ -38,6 +38,10 @@ enum FullDiskAccess {
 /// (`defaults write com.apple.desktopservices DSDontWriteUSBStores -bool true`).
 /// Finder reads it at launch, so changes apply after Finder relaunches.
 enum FinderPrefs {
+    /// True after the pref was changed until Finder is relaunched. Kept here
+    /// (not in view state) so it survives switching settings tabs.
+    nonisolated(unsafe) static var relaunchPending = false
+
     private static var domain: CFString { "com.apple.desktopservices" as CFString }
     private static var usbKey: CFString { "DSDontWriteUSBStores" as CFString }
 
@@ -68,19 +72,23 @@ enum LaunchAtLogin {
     static let settingsURL =
         URL(string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension")!
 
-    static var isEnabled: Bool {
+    /// The login item as the user sees it. `needsApproval` means it is
+    /// registered but macOS is waiting for the user to allow it.
+    enum State: Equatable, Sendable { case off, on, needsApproval }
+
+    static var state: State {
         #if DEBUG
-        if ScreenshotMode.isActive { return true }
+        if ScreenshotMode.isActive { return .on }
         #endif
-        return SMAppService.mainApp.status == .enabled
+        switch SMAppService.mainApp.status {
+        case .enabled:          return .on
+        case .requiresApproval: return .needsApproval
+        default:                return .off
+        }
     }
 
-    static var needsApproval: Bool {
-        #if DEBUG
-        if ScreenshotMode.isActive { return false }
-        #endif
-        return SMAppService.mainApp.status == .requiresApproval
-    }
+    static var isEnabled: Bool { state == .on }
+    static var needsApproval: Bool { state == .needsApproval }
 
     /// Registers or unregisters the login item and returns the resulting state.
     @discardableResult

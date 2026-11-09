@@ -94,4 +94,11 @@ struct MountedVolume: Identifiable, Equatable, Sendable {
     let uuid: String?
     /// nil when `mdutil -s` couldn't be read.
     let indexing: IndexingState?
+
+    // Action rules shared by the menu bar and the settings window.
+
+    /// Offer "Turn Spotlight Back On" (otherwise "Turn Spotlight Off").
+    var offersReEnable: Bool { indexing == .disabled }
+    /// Removing the index only makes sense while macOS won't rebuild it.
+    var canRemoveSpotlightIndex: Bool { indexing != .enabled }
 }

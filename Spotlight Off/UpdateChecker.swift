@@ -6,16 +6,17 @@ import Combine
 @MainActor
 final class UpdateChecker: ObservableObject {
     enum UpdateState: Equatable {
-        case idle, checking, upToDate
+        case idle, upToDate
         case updateAvailable(String, URL)
         case error(String)
     }
 
+    /// The last known result. A running check doesn't replace it, and a failed
+    /// check never hides an update we already know about.
     @Published private(set) var state: UpdateState = .idle
+    /// True while any check (manual or automatic) is running.
+    @Published private(set) var isChecking = false
 
-    var isChecking: Bool { inFlight }
-
-    private var inFlight = false
     private var scheduler: Task<Void, Never>?
     private static let checkInterval: TimeInterval = 24 * 60 * 60
     private nonisolated static let releasesURL =
@@ -41,12 +42,11 @@ final class UpdateChecker: ObservableObject {
     /// User-initiated checks show progress and errors in the UI; automatic
     /// checks stay quiet unless they find an update, which is announced once.
     func check(userInitiated: Bool = true) {
-        guard !inFlight else { return }
-        inFlight = true
-        if userInitiated { state = .checking }
+        guard !isChecking else { return }
+        isChecking = true
         Task {
             let result = await Self.fetchLatestRelease()
-            inFlight = false
+            isChecking = false
             UserDefaults.standard.set(Date(), forKey: PrefKey.lastUpdateCheck)
             switch result {
             case .success(let release):
@@ -58,7 +58,11 @@ final class UpdateChecker: ObservableObject {
                 }
             case .failure(let error):
                 if userInitiated {
-                    state = .error(error.message)
+                    if case .updateAvailable = state {
+                        LogStore.shared.log("Update check failed: \(error.message)", kind: .info)
+                    } else {
+                        state = .error(error.message)
+                    }
                 } else {
                     LogStore.shared.log("Automatic update check failed: \(error.message)", kind: .info)
                 }

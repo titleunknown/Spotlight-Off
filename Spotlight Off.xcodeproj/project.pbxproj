@@ -7,8 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		5F0A00000000000000000041 /* Screenshots.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0A00000000000000000040 /* Screenshots.swift */; };
-		5F0A00000000000000000031 /* HelpTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0A00000000000000000030 /* HelpTab.swift */; };
+		2339C7AB2F5B6C23002E8AB0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2339C7AA2F5B6C23002E8AB0 /* Assets.xcassets */; };
+		2339C7AE2F5B6C23002E8AB0 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2339C7AD2F5B6C23002E8AB0 /* Preview Assets.xcassets */; };
+		238CC6032F649F6600A66E66 /* SpotlightOffApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 238CC6022F649F6600A66E66 /* SpotlightOffApp.swift */; };
 		5F0A00000000000000000002 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0A00000000000000000001 /* Models.swift */; };
 		5F0A00000000000000000004 /* ProcessRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0A00000000000000000003 /* ProcessRunner.swift */; };
 		5F0A00000000000000000006 /* VolumeInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0A00000000000000000005 /* VolumeInspector.swift */; };
@@ -22,9 +23,8 @@
 		5F0A00000000000000000016 /* ActivityLogTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0A00000000000000000015 /* ActivityLogTab.swift */; };
 		5F0A00000000000000000018 /* SetupTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0A00000000000000000017 /* SetupTab.swift */; };
 		5F0A0000000000000000001B /* SpotlightOffTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0A0000000000000000001A /* SpotlightOffTests.swift */; };
-		2339C7AB2F5B6C23002E8AB0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2339C7AA2F5B6C23002E8AB0 /* Assets.xcassets */; };
-		2339C7AE2F5B6C23002E8AB0 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2339C7AD2F5B6C23002E8AB0 /* Preview Assets.xcassets */; };
-		238CC6032F649F6600A66E66 /* SpotlightOffApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 238CC6022F649F6600A66E66 /* SpotlightOffApp.swift */; };
+		5F0A00000000000000000031 /* HelpTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0A00000000000000000030 /* HelpTab.swift */; };
+		5F0A00000000000000000041 /* Screenshots.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F0A00000000000000000040 /* Screenshots.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -38,8 +38,11 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		5F0A00000000000000000040 /* Screenshots.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Screenshots.swift; sourceTree = "<group>"; };
-		5F0A00000000000000000030 /* HelpTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpTab.swift; sourceTree = "<group>"; };
+		2339C7A32F5B6C22002E8AB0 /* Spotlight Off.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Spotlight Off.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		2339C7AA2F5B6C23002E8AB0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		2339C7AD2F5B6C23002E8AB0 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+		2339C7AF2F5B6C23002E8AB0 /* Spotlight_Off.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Spotlight_Off.entitlements; sourceTree = "<group>"; };
+		238CC6022F649F6600A66E66 /* SpotlightOffApp.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SpotlightOffApp.swift; sourceTree = "<group>"; };
 		5F0A00000000000000000001 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		5F0A00000000000000000003 /* ProcessRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessRunner.swift; sourceTree = "<group>"; };
 		5F0A00000000000000000005 /* VolumeInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolumeInspector.swift; sourceTree = "<group>"; };
@@ -54,11 +57,8 @@
 		5F0A00000000000000000017 /* SetupTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupTab.swift; sourceTree = "<group>"; };
 		5F0A00000000000000000019 /* Spotlight OffTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Spotlight OffTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		5F0A0000000000000000001A /* SpotlightOffTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpotlightOffTests.swift; sourceTree = "<group>"; };
-		2339C7A32F5B6C22002E8AB0 /* Spotlight Off.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Spotlight Off.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		2339C7AA2F5B6C23002E8AB0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		2339C7AD2F5B6C23002E8AB0 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
-		2339C7AF2F5B6C23002E8AB0 /* Spotlight_Off.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Spotlight_Off.entitlements; sourceTree = "<group>"; };
-		238CC6022F649F6600A66E66 /* SpotlightOffApp.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SpotlightOffApp.swift; sourceTree = "<group>"; };
+		5F0A00000000000000000030 /* HelpTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelpTab.swift; sourceTree = "<group>"; };
+		5F0A00000000000000000040 /* Screenshots.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Screenshots.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -420,7 +420,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.2.0;
+				MARKETING_VERSION = 1.2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "Faini-Made.Spotlight-Off";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -453,7 +453,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.2.0;
+				MARKETING_VERSION = 1.2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "Faini-Made.Spotlight-Off";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

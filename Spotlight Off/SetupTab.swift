@@ -48,7 +48,7 @@ struct SetupTab: View {
                         detail: "Shows a macOS notification when a drive is handled. If you'd rather not allow them, Spotlight Off uses its own pop-up instead — or turn drive notifications off in the Settings tab.") {
                         switch notifier.systemAuthorization {
                         case .notDetermined:
-                            Button("Allow…") { notifier.requestAuthorizationIfNeeded() }
+                            Button("Allow…") { notifier.requestAuthorizationIfNeeded(force: true) }
                         case .denied:
                             Button("Open Notification Settings") { notifier.openSystemNotificationSettings() }
                         default:

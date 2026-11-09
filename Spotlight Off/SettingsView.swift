@@ -123,8 +123,9 @@ struct GeneralTab: View {
     @ObservedObject private var notifier = Notifier.shared
 
     @State private var launchAtLogin: Bool = LaunchAtLogin.isEnabled
+    @State private var loginNeedsApproval = LaunchAtLogin.needsApproval
     @State private var preventDSStore = FinderPrefs.preventsDSStoreOnExternalDrives
-    @State private var finderNeedsRelaunch = false
+    @State private var finderNeedsRelaunch = FinderPrefs.relaunchPending
     @AppStorage(PrefKey.notificationsEnabled) private var notificationsEnabled = true
     @AppStorage(PrefKey.notificationStyle) private var notificationStyle: NotificationStyle = .system
     @AppStorage(PrefKey.autoCheckUpdates) private var autoCheckUpdates = true
@@ -140,8 +141,17 @@ struct GeneralTab: View {
 
                 Card {
                     SettingsRow(icon: "arrow.up.circle", iconColor: .blue) {
-                        Toggle("Launch at login", isOn: $launchAtLogin)
-                            .onChange(of: launchAtLogin) { _, enabled in setLaunchAtLogin(enabled) }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Toggle("Launch at login", isOn: $launchAtLogin)
+                                .onChange(of: launchAtLogin) { _, enabled in setLaunchAtLogin(enabled) }
+                            if loginNeedsApproval {
+                                HStack(spacing: 6) {
+                                    Caption("macOS needs you to approve this in Login Items.")
+                                    Button("Open") { NSWorkspace.shared.open(LaunchAtLogin.settingsURL) }
+                                        .buttonStyle(.link).font(.caption)
+                                }
+                            }
+                        }
                     }
 
                     RowDivider()
@@ -179,6 +189,7 @@ struct GeneralTab: View {
                                     FinderPrefs.preventsDSStoreOnExternalDrives = enabled
                                     LogStore.shared.log(enabled ? "Finder will stop writing .DS_Store files on external drives"
                                                                 : "Finder may write .DS_Store files on external drives again")
+                                    FinderPrefs.relaunchPending = true
                                     finderNeedsRelaunch = true
                                 }
                             HStack(spacing: 8) {
@@ -186,6 +197,7 @@ struct GeneralTab: View {
                                 if finderNeedsRelaunch {
                                     Button("Relaunch Finder") {
                                         FinderPrefs.relaunchFinder()
+                                        FinderPrefs.relaunchPending = false
                                         finderNeedsRelaunch = false
                                     }
                                     .buttonStyle(.link).font(.caption)
@@ -231,7 +243,7 @@ struct GeneralTab: View {
         case .notDetermined:
             HStack(spacing: 6) {
                 Caption("Pop-ups are used until you allow notifications.")
-                Button("Allow…") { notifier.requestAuthorizationIfNeeded() }
+                Button("Allow…") { notifier.requestAuthorizationIfNeeded(force: true) }
                     .buttonStyle(.link).font(.caption)
             }
         default:
@@ -242,11 +254,13 @@ struct GeneralTab: View {
     private var updateRow: some View {
         HStack {
             switch updater.state {
-            case .idle:        Text("Check for Updates")
-            case .checking:    Text("Checking…").foregroundColor(.secondary)
-            case .upToDate:    Text("You're up to date ✓").foregroundColor(.green)
             case .updateAvailable(let tag, _):
+                // Stays visible even while a re-check runs.
                 Text("Update available: \(tag)").foregroundColor(.orange)
+            case _ where updater.isChecking:
+                Text("Checking…").foregroundColor(.secondary)
+            case .idle:        Text("Check for Updates")
+            case .upToDate:    Text("You're up to date ✓").foregroundColor(.green)
             case .error(let msg):
                 Text("Error: \(msg)").foregroundColor(.red).lineLimit(2)
             }
@@ -268,10 +282,12 @@ struct GeneralTab: View {
         // what the user just registered.
         guard enabled != LaunchAtLogin.isEnabled else { return }
         launchAtLogin = LaunchAtLogin.set(enabled)
+        loginNeedsApproval = LaunchAtLogin.needsApproval
     }
 
     private func syncWithSystem() {
         launchAtLogin = LaunchAtLogin.isEnabled
+        loginNeedsApproval = LaunchAtLogin.needsApproval
         preventDSStore = FinderPrefs.preventsDSStoreOnExternalDrives
         Task { await notifier.refreshAuthorization() }
     }
@@ -426,7 +442,6 @@ struct DriveRow: View {
     let isBusy: Bool
     let monitor: DriveMonitor
 
-    private var isOff: Bool { volume.indexing == .disabled }
 
     private var status: (text: String, icon: String, color: Color) {
         switch volume.indexing {
@@ -451,7 +466,7 @@ struct DriveRow: View {
             }
             Spacer()
             if isBusy { ProgressView().controlSize(.small) }
-            if isOff {
+            if volume.offersReEnable {
                 Button("Re-enable") { monitor.reEnableIndexing(volume) }
                     .buttonStyle(.bordered).controlSize(.small)
                     .disabled(isBusy)
@@ -464,7 +479,7 @@ struct DriveRow: View {
                 Button("Open in Finder") { monitor.openInFinder(volume) }
                 Divider()
                 Button("Remove Spotlight Index…") { DriveActions.removeSpotlightIndex(volume, monitor: monitor) }
-                    .disabled(volume.indexing == .enabled)
+                    .disabled(!volume.canRemoveSpotlightIndex)
                 Button("Remove macOS Clutter…") { DriveActions.removeClutter(volume, monitor: monitor) }
             } label: {
                 Image(systemName: "ellipsis.circle")

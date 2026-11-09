@@ -164,13 +164,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
             menu.addItem(item)
         }
         add("Open in Finder", #selector(openPath(_:)))
-        if drive.indexing == .disabled {
+        if drive.offersReEnable {
             add("Turn Spotlight Back On", #selector(reEnableDrive(_:)))
         } else {
             add("Turn Spotlight Off", #selector(disableDrive(_:)))
         }
         menu.addItem(.separator())
-        add("Remove Spotlight Index…", #selector(removeIndex(_:)), enabled: drive.indexing != .enabled)
+        add("Remove Spotlight Index…", #selector(removeIndex(_:)), enabled: drive.canRemoveSpotlightIndex)
         add("Remove macOS Clutter…", #selector(removeClutter(_:)))
         return menu
     }

@@ -30,24 +30,35 @@ final class Notifier: ObservableObject {
         NotificationStyle(rawValue: UserDefaults.standard.string(forKey: PrefKey.notificationStyle) ?? "") ?? .system
     }
 
-    private var systemAllowed: Bool {
-        systemAuthorization == .authorized || systemAuthorization == .provisional
+    enum Delivery: Equatable, Sendable { case drop, system, toast }
+
+    /// How a notice is delivered — a pure function of the settings and the
+    /// system's permission, so every combination can be tested.
+    nonisolated static func delivery(isDriveEvent: Bool, notificationsEnabled: Bool,
+                                     style: NotificationStyle,
+                                     authorization: UNAuthorizationStatus) -> Delivery {
+        if isDriveEvent && !notificationsEnabled { return .drop }
+        let systemAllowed = authorization == .authorized || authorization == .provisional
+        return style == .system && systemAllowed ? .system : .toast
     }
 
     func post(_ notice: Notice) {
-        if notice.isDriveEvent && !UserDefaults.standard.bool(forKey: PrefKey.notificationsEnabled) { return }
-        if style == .system && systemAllowed {
-            postSystem(notice)
-        } else {
-            presentToast(notice)
+        switch Self.delivery(isDriveEvent: notice.isDriveEvent,
+                             notificationsEnabled: UserDefaults.standard.bool(forKey: PrefKey.notificationsEnabled),
+                             style: style, authorization: systemAuthorization) {
+        case .drop:   return
+        case .system: postSystem(notice)
+        case .toast:  presentToast(notice)
         }
     }
 
     /// Asks for permission the first time system notifications are in use.
-    func requestAuthorizationIfNeeded() {
+    /// `force` asks even when the pop-up style is selected — for an explicit
+    /// "Allow…" click, which must never be a silent no-op.
+    func requestAuthorizationIfNeeded(force: Bool = false) {
         Task {
             let center = UNUserNotificationCenter.current()
-            if style == .system, await center.notificationSettings().authorizationStatus == .notDetermined {
+            if force || style == .system, await center.notificationSettings().authorizationStatus == .notDetermined {
                 _ = try? await center.requestAuthorization(options: [.alert, .sound])
             }
             await refreshAuthorization()
